@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.local
+.DS_Store
+*.log
+.vercel/
+.railway/
+.claude/
+
+# Dev-only artifacts — production deploy için gereksiz
+uploads/
+screenshots/
+scraps/

@@ -1,0 +1,20 @@
+{
+  "name": "seasonal-keyword-dashboard",
+  "version": "1.0.0",
+  "description": "Brand-agnostic seasonal keyword intelligence dashboard template. Drop an Excel + logo, run build, deploy.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "build": "node scripts/build-data.js",
+    "test": "node --test scripts/build-data.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
