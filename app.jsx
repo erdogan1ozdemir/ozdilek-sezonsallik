@@ -64,9 +64,34 @@
     , [globalK1, globalK2]);
 
     // Sticky shadow state
+    // Filter bar scroll davranışı:
+    //  - 140px üzerinde shadow'lu (scrolled class)
+    //  - Aşağı scroll -> gizle (hidden class, transform: translateY(-100%))
+    //  - Yukarı scroll -> tekrar aç
+    //  - Tepe noktasına yakın (< 140px) her zaman göster
     const [filterScrolled, setFilterScrolled] = React.useState(false);
+    const [filterHidden, setFilterHidden] = React.useState(false);
     React.useEffect(() => {
-      const onScroll = () => setFilterScrolled(window.scrollY > 140);
+      let lastY = window.scrollY;
+      let ticking = false;
+      const threshold = 8; // küçük jitter'ları yok say
+      const onScroll = () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          const y = window.scrollY;
+          const delta = y - lastY;
+          if (y < 140) {
+            setFilterHidden(false);
+          } else if (Math.abs(delta) > threshold) {
+            if (delta > 0) setFilterHidden(true);
+            else setFilterHidden(false);
+          }
+          setFilterScrolled(y > 140);
+          lastY = y;
+          ticking = false;
+        });
+      };
       window.addEventListener('scroll', onScroll, {passive:true});
       return () => window.removeEventListener('scroll', onScroll);
     }, []);
@@ -216,7 +241,7 @@
       ),
 
       // Global category filter - sticky under tabs, visible across all tabs
-      h('div',{className:'global-filter-wrap'+(filterScrolled?' scrolled':'')},
+      h('div',{className:'global-filter-wrap'+(filterScrolled?' scrolled':'')+(filterHidden?' hidden':'')},
         h('div',{className:'filter-panel'},
           h('div',{className:'filter-panel-label'},
             h('span',{className:'fp-icon'},
