@@ -108,6 +108,7 @@ window.TABS = (function(){
   function OzetTab({setKeywordModal, onNavigateCat, onNavigateKw, globalFilter}) {
     const [heatLevel, setHeatLevel] = React.useState('kat1');
     const [heatFilter, setHeatFilter] = React.useState({k1:'', k2:''});
+    const [heatSort, setHeatSort] = React.useState('vol');  // vol | yoyDesc | yoyAsc | alpha
     const [qLevel, setQLevel] = React.useState('kat1');
     const [qFilter, setQFilter] = React.useState({k1:'', k2:''});
     const [yoyLevel, setYoyLevel] = React.useState('kat1');
@@ -233,7 +234,11 @@ window.TABS = (function(){
       if (heatLevel === 'kat1') rows = D.kat1Monthly;
       else if (heatLevel === 'kat2') rows = D.kat2Monthly.filter(r => !heatFilter.k1 || r.labels[0] === heatFilter.k1);
       else rows = D.kat3Monthly.filter(r => (!heatFilter.k1 || r.labels[0] === heatFilter.k1) && (!heatFilter.k2 || r.labels[1] === heatFilter.k2));
-      // Tüm satırlar gösterilir; kart içi dikey scroll container (aşağıda) uzun listeyi taşıyor
+      rows = [...rows];
+      if (heatSort === 'vol') rows.sort((a,b) => (b.m25||[]).reduce((s,x)=>s+x,0) - (a.m25||[]).reduce((s,x)=>s+x,0));
+      else if (heatSort === 'yoyDesc') rows.sort((a,b) => (b.yoy||0) - (a.yoy||0));
+      else if (heatSort === 'yoyAsc') rows.sort((a,b) => (a.yoy||0) - (b.yoy||0));
+      else if (heatSort === 'alpha') rows.sort((a,b) => (a.labels[a.labels.length-1]||'').localeCompare(b.labels[b.labels.length-1]||'', 'tr'));
       return rows.map(r => {
         const peakIdx = r.m25.indexOf(Math.max(...r.m25));
         return {
@@ -243,7 +248,7 @@ window.TABS = (function(){
           ctx: {k1:r.labels[0], k2:r.labels[1], k3:r.labels[2]}
         };
       });
-    }, [heatLevel, heatFilter]);
+    }, [heatLevel, heatFilter, heatSort]);
 
     return h('div',null,
       // Report explainer at top
@@ -318,11 +323,13 @@ window.TABS = (function(){
           )
         ),
         h('div',{className:'hk-spark'},
+          // Legend kartın subtitle bölgesinde zaten söyleniyor; chart konteynere
+          // tam oturması için legend:false. Renk kodu 2024 gri / 2025 coral.
           h(LineChart,{
             series:[
               {name:'2024', values:f_MONTHLY_24, color:'color-mix(in srgb, var(--ink-3) 80%, transparent)'},
               {name:'2025', values:f_MONTHLY_25, color:'var(--coral)', peakIdx:f_PEAK_IDX}
-            ], legend:true, height:140
+            ], legend:false, height:140
           })
         ),
         h('div',{className:'hk-right'},
@@ -582,6 +589,12 @@ window.TABS = (function(){
             h('button',{className:heatLevel==='kat2'?'active':'', onClick:()=>{setHeatLevel('kat2');}}, 'Kat 2'),
             h('button',{className:heatLevel==='kat3'?'active':'', onClick:()=>{setHeatLevel('kat3');}}, 'Kat 3')
           ),
+          h('div',{className:'segmented', title:'Sıralama'},
+            h('button',{className:heatSort==='vol'?'active':'', onClick:()=>setHeatSort('vol')}, 'Hacim ↓'),
+            h('button',{className:heatSort==='yoyDesc'?'active':'', onClick:()=>setHeatSort('yoyDesc')}, 'YoY ↑'),
+            h('button',{className:heatSort==='yoyAsc'?'active':'', onClick:()=>setHeatSort('yoyAsc')}, 'YoY ↓'),
+            h('button',{className:heatSort==='alpha'?'active':'', onClick:()=>setHeatSort('alpha')}, 'A-Z')
+          ),
           heatLevel !== 'kat1' && h('select',{className:'select', value:heatFilter.k1, onChange:e=>setHeatFilter({k1:e.target.value,k2:''})},
             h('option',{value:''}, 'Tüm Kat 1'),
             D.kat1Summary.map(k => h('option',{key:k.k1, value:k.k1}, k.k1))
@@ -818,6 +831,7 @@ window.TABS = (function(){
   // === Kategoriler Tab ===
   function KategorilerTab({filter, setFilter, onNavigateKw}) {
     const [level, setLevel] = React.useState('kat1');
+    const [catSort, setCatSort] = React.useState('vol');  // vol | yoyDesc | yoyAsc | alpha
     // Multi-selects - independent per level
     const [multiK1, setMultiK1] = React.useState(() => filter.k1 ? [filter.k1] : []);
     const [multiK2, setMultiK2] = React.useState(() => filter.k2 ? [filter.k2] : []);
@@ -855,7 +869,14 @@ window.TABS = (function(){
       if (level === 'kat3' && activeK3Set && !activeK3Set.has(r.labels[2])) return false;
       return true;
     });
-    const sorted = [...scoped].sort((a,b) => b.a25 - a.a25);
+    const sorted = React.useMemo(() => {
+      const s = [...scoped];
+      if (catSort === 'vol') return s.sort((a,b) => (b.a25||0) - (a.a25||0));
+      if (catSort === 'yoyDesc') return s.sort((a,b) => (b.yoy||0) - (a.yoy||0));
+      if (catSort === 'yoyAsc') return s.sort((a,b) => (a.yoy||0) - (b.yoy||0));
+      if (catSort === 'alpha') return s.sort((a,b) => (a.labels[a.labels.length-1]||'').localeCompare(b.labels[b.labels.length-1]||'', 'tr'));
+      return s;
+    }, [scoped, catSort]);
 
     // Line chart data - filtered by whatever is selected
     const lineKeywords = React.useMemo(() => {
@@ -928,6 +949,12 @@ window.TABS = (function(){
           width: 200
         }),
         h('div',{style:{flex:1}}),
+        h('div',{className:'segmented', title:'Sıralama'},
+          h('button',{className:catSort==='vol'?'active':'', onClick:()=>setCatSort('vol')}, 'Hacim ↓'),
+          h('button',{className:catSort==='yoyDesc'?'active':'', onClick:()=>setCatSort('yoyDesc')}, 'YoY ↑'),
+          h('button',{className:catSort==='yoyAsc'?'active':'', onClick:()=>setCatSort('yoyAsc')}, 'YoY ↓'),
+          h('button',{className:catSort==='alpha'?'active':'', onClick:()=>setCatSort('alpha')}, 'A-Z')
+        ),
         h('span',{className:'txt-3', style:{fontSize:12}}, fmtFull(sorted.length)+' kategori'),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(sorted, [
@@ -1100,6 +1127,7 @@ window.TABS = (function(){
     const [trendFilter, setTrendFilter] = React.useState(initialFilter?.trend || '');
     const [sort, setSort] = React.useState({k:'a25', d:-1});
     const [peakMonth, setPeakMonth] = React.useState('');
+    const [peakQuarter, setPeakQuarter] = React.useState('');
     const [page, setPage] = React.useState(0);
     const perPage = 50;
 
@@ -1135,6 +1163,13 @@ window.TABS = (function(){
         const mi = +peakMonth;
         rows = rows.filter(r => r.m25.indexOf(Math.max(...r.m25)) === mi);
       }
+      if (peakQuarter !== '') {
+        const qi = +peakQuarter;  // 0..3
+        rows = rows.filter(r => {
+          const pi = r.m25.indexOf(Math.max(...r.m25));
+          return Math.floor(pi / 3) === qi;
+        });
+      }
       const s = sort.k, d = sort.d;
       rows = [...rows].sort((a,b) => {
         const av = a[s], bv = b[s];
@@ -1142,9 +1177,9 @@ window.TABS = (function(){
         return (av > bv ? 1 : av < bv ? -1 : 0) * d;
       });
       return rows;
-    }, [q, k1, k2, k3, bucket, sort, peakMonth, trendFilter]);
+    }, [q, k1, k2, k3, bucket, sort, peakMonth, peakQuarter, trendFilter]);
 
-    React.useEffect(() => setPage(0), [q, k1, k2, k3, bucket, peakMonth, trendFilter]);
+    React.useEffect(() => setPage(0), [q, k1, k2, k3, bucket, peakMonth, peakQuarter, trendFilter]);
     const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
     const totalPages = Math.ceil(filtered.length/perPage);
     const buckets = [...new Set(D.keywords.map(k=>k.bucket))].filter(Boolean);
@@ -1192,12 +1227,18 @@ window.TABS = (function(){
           h('option',{value:''}, 'Tüm Peak Ayları'),
           TR_MONTHS.map((m,i) => h('option',{key:i, value:i}, 'Peak: '+m))
         ),
+        h('select',{className:'select', value:peakQuarter, onChange:e=>setPeakQuarter(e.target.value)},
+          h('option',{value:''}, 'Tüm Peak Çeyrekleri'),
+          ['Q1 (Oca-Mar)','Q2 (Nis-Haz)','Q3 (Tem-Eyl)','Q4 (Eki-Ara)'].map((lbl,i) => h('option',{key:i, value:i}, 'Peak: '+lbl))
+        ),
         h('div',{style:{flex:1}}),
-        h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{setQ('');setK1('');setK2('');setK3('');setBucket('');setPeakMonth('');setTrendFilter('');}}, '× Temizle'),
+        h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{setQ('');setK1('');setK2('');setK3('');setBucket('');setPeakMonth('');setPeakQuarter('');setTrendFilter('');}}, '× Temizle'),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
             {label:'Keyword',key:'kw'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
             {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'}, {label:'Bucket',key:'bucket'},
+            {label:'Peak Ay', get:r=>TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))]},
+            {label:'Peak Çeyrek', get:r=>'Q'+(Math.floor(r.m25.indexOf(Math.max(...r.m25))/3)+1)},
             ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
           ]);
           downloadCSV(`${BRAND_SLUG}-keywords.csv`, csv);
@@ -1205,14 +1246,15 @@ window.TABS = (function(){
       ),
 
       // Active filter chips
-      (k1 || k2 || k3 || trendFilter || bucket || peakMonth !== '') && h('div',{className:'filter-chips'},
+      (k1 || k2 || k3 || trendFilter || bucket || peakMonth !== '' || peakQuarter !== '') && h('div',{className:'filter-chips'},
         h('span',{className:'lbl'}, 'Aktif:'),
         k1 && h('button',{className:'filter-chip', onClick:()=>{setK1('');setK2('');setK3('');}}, k1, h('span',{className:'x'},'×')),
         k2 && h('button',{className:'filter-chip', onClick:()=>{setK2('');setK3('');}}, k2, h('span',{className:'x'},'×')),
         k3 && h('button',{className:'filter-chip', onClick:()=>setK3('')}, k3, h('span',{className:'x'},'×')),
         trendFilter && h('button',{className:'filter-chip', onClick:()=>setTrendFilter('')}, trendFilter==='rising'?'↑ Yükselen':trendFilter==='falling'?'↓ Düşen':'Stabil', h('span',{className:'x'},'×')),
         bucket && h('button',{className:'filter-chip', onClick:()=>setBucket('')}, bucket, h('span',{className:'x'},'×')),
-        peakMonth !== '' && h('button',{className:'filter-chip', onClick:()=>setPeakMonth('')}, 'Peak: '+TR_MONTHS[+peakMonth], h('span',{className:'x'},'×'))
+        peakMonth !== '' && h('button',{className:'filter-chip', onClick:()=>setPeakMonth('')}, 'Peak: '+TR_MONTHS[+peakMonth], h('span',{className:'x'},'×')),
+        peakQuarter !== '' && h('button',{className:'filter-chip', onClick:()=>setPeakQuarter('')}, 'Peak: Q'+(+peakQuarter+1), h('span',{className:'x'},'×'))
       ),
 
       h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:14}},
@@ -1235,14 +1277,16 @@ window.TABS = (function(){
                 th('2025','a25',true),
                 th('YoY','yoy',true),
                 h('th',null,'12 Ay Trend'),
-                h('th',null,'Peak'),
+                h('th',null,'Peak Ay'),
+                h('th',null,'Peak Ç.'),
                 h('th',null,'Bucket')
               )
             ),
             h('tbody',null,
-              pageRows.length === 0 && h('tr',null, h('td',{colSpan:10, className:'empty'}, 'Sonuç bulunamadı')),
+              pageRows.length === 0 && h('tr',null, h('td',{colSpan:11, className:'empty'}, 'Sonuç bulunamadı')),
               pageRows.map((r,i) => {
                 const peakIdx = r.m25.indexOf(Math.max(...r.m25));
+                const peakQ = Math.floor(peakIdx / 3) + 1;
                 return h('tr',{key:page*perPage+i, className:'clickable', onClick:()=>setKeywordModal(r)},
                   h('td',{className:'kw-cell', style:{maxWidth:220}}, r.kw),
                   h('td',{style:{fontSize:11}},
@@ -1258,6 +1302,7 @@ window.TABS = (function(){
                   h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
                   h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
                   h('td',null, h('span',{className:'pill neu'}, TR_MONTHS[peakIdx])),
+                  h('td',null, h('span',{className:'pill q'+peakQ}, 'Q'+peakQ)),
                   h('td',null, h('span',{className:'cat-pill'}, r.bucket))
                 );
               })

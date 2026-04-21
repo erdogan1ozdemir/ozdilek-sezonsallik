@@ -273,11 +273,25 @@ window.C = (function(){
   }
 
   // === LineChart with crosshair tooltip ===
+  // Responsive: ResizeObserver ile container genişliğini ölçer, viewBox buna göre
+  // kurulur. SVG fixed height prop ile çizilir, aspect ratio bozulmaz, taşma olmaz.
   function LineChart({series, height=220, labels=TR_MONTHS, yFormat=fmtNum, legend}) {
     const [hoverI, setHoverI] = React.useState(null);
+    const wrapRef = React.useRef(null);
     const svgRef = React.useRef(null);
+    const [containerW, setContainerW] = React.useState(720);
 
-    const w = 720, pad = {t:16, r:16, b:28, l:48};
+    React.useLayoutEffect(() => {
+      const el = wrapRef.current;
+      if (!el || typeof ResizeObserver === 'undefined') return;
+      const set = () => { const cw = el.clientWidth; if (cw > 0) setContainerW(cw); };
+      set();
+      const ro = new ResizeObserver(set);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }, []);
+
+    const w = Math.max(320, containerW), pad = {t:16, r:16, b:28, l:48};
     const cw = w - pad.l - pad.r;
     const ch = height - pad.t - pad.b;
     const all = series.flatMap(s => s.values || []).filter(v => v != null);
@@ -301,7 +315,7 @@ window.C = (function(){
     }
     function onLeave() { setHoverI(null); }
 
-    return h('div',{className:'chart-wrap', style:{position:'relative'}},
+    return h('div',{ref: wrapRef, className:'chart-wrap', style:{position:'relative', width:'100%'}},
       legend && h('div',{className:'legend', style:{marginBottom:8}},
         series.map((s,i) => h('div',{key:i,className:'li'},
           h('div',{className:'swatch', style:{background:s.color}}),
@@ -311,7 +325,8 @@ window.C = (function(){
       h('svg',{
         ref: svgRef,
         viewBox:`0 0 ${w} ${height}`,
-        style:{width:'100%', height:'auto', display:'block', cursor:'crosshair'},
+        width: w, height,
+        style:{width:'100%', height, display:'block', cursor:'crosshair'},
         onMouseMove: onMove, onMouseLeave: onLeave
       },
         tickVals.map((t,i) => h('g',{key:'t'+i},
