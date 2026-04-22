@@ -2277,7 +2277,7 @@ window.TABS = (function(){
             }
           }, '↓ CSV')
         ),
-        h('div',{className:'tbl-wrap'},
+        h('div',{className:'tbl-wrap', style:{maxHeight:600, overflow:'auto'}},
           h('table',{className:'tbl'},
             h('thead',null, h('tr',null,
               h('th',{style:{width:26}}, ''),
@@ -2293,12 +2293,12 @@ window.TABS = (function(){
               h('th',{className:'num'},'Kat Payı')
             )),
             h('tbody',null,
-              brandPageRows.length === 0 && h('tr',null, h('td',{colSpan:11, className:'empty'}, 'Sonuç bulunamadı')),
-              brandPageRows.flatMap((b,i) => {
+              brandRows.length === 0 && h('tr',null, h('td',{colSpan:11, className:'empty'}, 'Sonuç bulunamadı')),
+              brandRows.flatMap((b,i) => {
                 const isOpen = expandedBrands.has(b.brand);
                 const mainRow = h('tr',{key:'b'+i, className:'clickable', onClick:()=>toggleExpand(b.brand)},
                   h('td',{style:{width:26, color:'var(--ink-3)', fontSize:10, textAlign:'center'}}, isOpen ? '▾' : '▸'),
-                  h('td',{style:{width:40, color:'var(--ink-3)', fontSize:11}}, brandPage*brandsPerPage + i + 1),
+                  h('td',{style:{width:40, color:'var(--ink-3)', fontSize:11}}, i + 1),
                   h('td',null, h('strong',null, b.brand)),
                   h('td',{className:'num'}, fmtNum(b.count)),
                   h('td',{className:'num', title:fmtFull(toMonthlyAvg(b.sum24))}, fmtNum(toMonthlyAvg(b.sum24))),
@@ -2384,10 +2384,9 @@ window.TABS = (function(){
             )
           )
         ),
-        brandTotalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
-          h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:brandPage===0, onClick:()=>setBrandPage(p=>Math.max(0,p-1))}, '← Önceki'),
-          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${brandPage+1}/${brandTotalPages} · ${fmtNum(brandRows.length)} marka`),
-          h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:brandPage>=brandTotalPages-1, onClick:()=>setBrandPage(p=>Math.min(brandTotalPages-1, p+1))}, 'Sonraki →')
+        h('div',{style:{padding:'8px 14px', borderTop:'1px solid var(--line)', fontSize:11, color:'var(--ink-3)', display:'flex', alignItems:'center', justifyContent:'space-between'}},
+          h('span',null, fmtNum(brandRows.length) + ' marka · scrollable (tek sayfa)'),
+          brandRows.length > 0 && h('span',{className:'txt-3'}, 'Satıra tıkla → alt kategori kırılımı açılır')
         )
       ),
 
