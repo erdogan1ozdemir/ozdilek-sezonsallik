@@ -61,6 +61,8 @@ function loadRawKeywords(src) {
     if (h === 'Main Cat.') idx.k1 = i;
     else if (h === 'Keyword Cat. 1') idx.k2 = i;
     else if (h === 'Keyword Cat. 2') idx.k3 = i;
+    else if (h === 'Marka') idx.brand = i;
+    else if (h === 'Özdilekte Olan Markalar') idx.cat = i;
     else if (h === 'Keyword') idx.kw = i;
     else if (h === 'Prev. 12 Month\nSearch vol') idx.a24 = i;
     else if (h === 'Last 12 Month\nSearch vol') idx.a25 = i;
@@ -90,8 +92,13 @@ function loadRawKeywords(src) {
     const m24 = [], m25 = [];
     for (let i = 0; i < 12; i++) m24.push(num(row[m24Start + i]));
     for (let i = 0; i < 12; i++) m25.push(num(row[m25Start + i]));
+    const brandRaw = idx.brand !== undefined ? row[idx.brand] : null;
+    const catRaw = idx.cat !== undefined ? row[idx.cat] : null;
     out.push({
       k1, k2, k3,
+      brand: brandRaw == null ? '' : String(brandRaw).trim(),
+      // catalog: 'Var' | 'Yok' | '' (unclassified / generic)
+      catalog: catRaw == null ? '' : String(catRaw).trim(),
       kw: String(row[idx.kw]).trim(),
       a24: num(row[idx.a24]),
       a25: num(row[idx.a25]),
@@ -103,6 +110,37 @@ function loadRawKeywords(src) {
     });
   }
   return out;
+}
+
+function loadBrands(src) {
+  const wb = XLSX.readFile(src);
+  const sh = wb.Sheets['Brand Pivot Tablo'];
+  if (!sh) return [];
+  const rows = XLSX.utils.sheet_to_json(sh, { header: 1, defval: null, raw: true });
+  // Header at row 0: Col A "Özdilekte Olan Markalar", B "Marka", C "SUM prev", D "SUM last", E YoY, F-I Q1-Q4, J peak serial, K-V 12 monthly sums
+  const out = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || !row[1]) continue;
+    const brand = String(row[1]).trim();
+    if (!brand) continue;
+    const catalog = row[0] == null ? '' : String(row[0]).trim();
+    const sum24 = num(row[2]);
+    const sum25 = num(row[3]);
+    const yoy = num(row[4]);
+    const pq = [num(row[5]), num(row[6]), num(row[7]), num(row[8])];
+    const peakSerial = numOrNull(row[9]);
+    const m25 = [];
+    for (let i = 0; i < 12; i++) m25.push(num(row[10 + i]));
+    out.push({ brand, catalog, sum24, sum25, yoy, pq, peakSerial, m25 });
+  }
+  // Dedupe by brand (some may appear twice if Var+Yok — keep highest 2025 volume)
+  const byBrand = new Map();
+  for (const b of out) {
+    const existing = byBrand.get(b.brand);
+    if (!existing || b.sum25 > existing.sum25) byBrand.set(b.brand, b);
+  }
+  return [...byBrand.values()];
 }
 
 function peakMonthSerial2025(m25) {
@@ -147,7 +185,7 @@ function quartileOf(a25, quartiles) {
 
 function buildSezonsallik(kws) {
   const header = [
-    'Kat 1','Kat 2','Kat 3','Keyword',
+    'Kat 1','Kat 2','Kat 3','Marka','Katalog','Keyword',
     '2024 Avg. Search Volume','2025 Avg. Search Volume','YoY change',
     '2025 \nQ1 Peak','2025 \nQ2 Peak','2025 \nQ3 Peak','2025 \nQ4 Peak',
     'En Yuksek Ay?',
@@ -158,13 +196,32 @@ function buildSezonsallik(kws) {
   const rows = [header];
   for (const k of kws) {
     rows.push([
-      k.k1, k.k2, k.k3, k.kw,
+      k.k1, k.k2, k.k3, k.brand || '', k.catalog || '', k.kw,
       k.a24, k.a25, k.yoy,
       k.pq[0], k.pq[1], k.pq[2], k.pq[3],
       k.peakSerial || peakMonthSerial2025(k.m25),
       ...k.m24,
       k.bucket || bucketOf(k.a25),
       ...k.m25,
+    ]);
+  }
+  return rows;
+}
+
+function buildBrands(brands) {
+  const header = [
+    'Marka','Katalog','2024 Avg','2025 Avg','YoY Change',
+    '2025 \nQ1 Peak','2025 \nQ2 Peak','2025 \nQ3 Peak','2025 \nQ4 Peak',
+    'En Yuksek Ay?',
+    ...MONTH_SERIALS_2025.map(s => 'Sum 2025 ' + s),
+  ];
+  const rows = [header];
+  for (const b of brands) {
+    rows.push([
+      b.brand, b.catalog, b.sum24, b.sum25, b.yoy,
+      b.pq[0], b.pq[1], b.pq[2], b.pq[3],
+      b.peakSerial || peakMonthSerial2025(b.m25),
+      ...b.m25,
     ]);
   }
   return rows;
@@ -400,6 +457,15 @@ function main() {
   const kws = loadRawKeywords(args.in);
   console.log(`[prep] Loaded ${kws.length} keywords`);
 
+  // Split by catalog flag. "Yok" = Özdilek'te olmayan marka → ayrı tab'a gider.
+  // "Var" ve boş (brand-free keywords) main dashboard'a girer.
+  const kwsIn = kws.filter(k => k.catalog !== 'Yok');
+  const kwsOut = kws.filter(k => k.catalog === 'Yok');
+  console.log(`[prep] Split: ${kwsIn.length} in-catalog, ${kwsOut.length} out-of-catalog`);
+
+  const brands = loadBrands(args.in);
+  console.log(`[prep] Loaded ${brands.length} brands from Brand Pivot Tablo`);
+
   const wb = XLSX.utils.book_new();
   const add = (name, data) => {
     const ws = XLSX.utils.aoa_to_sheet(data);
@@ -407,17 +473,24 @@ function main() {
     console.log(`  + ${name}: ${data.length} rows`);
   };
 
-  add('Sezonsallık', buildSezonsallik(kws));
-  add('Özet Dashboard', buildOzet(kws));
-  add('Kat 1 Sez.', buildKatMonthly(kws, 1));
-  add('Kat 2 Sez.', buildKatMonthly(kws, 2));
-  add('Kat 3 Sez.', buildKatMonthly(kws, 3));
-  add('Top Yükselen & Düşenler', buildTrend(kws));
-  add('Sezonsallık Tipi', buildSezType(kws));
-  add('Peak Quarter Analizi', buildPeakQ(kws));
-  add('Akıllı Ürün Trendi', buildSmart(kws));
-  add('Fiyat Intent', buildPrice(kws));
-  add('Hacme Göre Top KWs', buildVolQ(kws));
+  // Main dashboard sheets (in-catalog only - Var + unclassified)
+  add('Sezonsallık', buildSezonsallik(kwsIn));
+  add('Özet Dashboard', buildOzet(kwsIn));
+  add('Kat 1 Sez.', buildKatMonthly(kwsIn, 1));
+  add('Kat 2 Sez.', buildKatMonthly(kwsIn, 2));
+  add('Kat 3 Sez.', buildKatMonthly(kwsIn, 3));
+  add('Top Yükselen & Düşenler', buildTrend(kwsIn));
+  add('Sezonsallık Tipi', buildSezType(kwsIn));
+  add('Peak Quarter Analizi', buildPeakQ(kwsIn));
+  add('Akıllı Ürün Trendi', buildSmart(kwsIn));
+  add('Fiyat Intent', buildPrice(kwsIn));
+  add('Hacme Göre Top KWs', buildVolQ(kwsIn));
+
+  // Out-of-catalog: sadece Sezonsallık (tüm kelimeler) - single tab için yeterli
+  add('Sezonsallık_Out', buildSezonsallik(kwsOut));
+
+  // Brands
+  add('Brands', buildBrands(brands));
 
   XLSX.writeFile(wb, OUT_XLSX);
   const size = fs.statSync(OUT_XLSX).size;

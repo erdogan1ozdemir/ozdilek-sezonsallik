@@ -99,30 +99,31 @@ function blank(row) {
 // Header includes: Kat 1, Kat 2, Kat 3, [optional brand-specific col like "VitrA Not"],
 // Keyword, 2024 Avg. Search Volume, 2025 Avg. Search Volume, YoY change,
 // 2025 Q1 Peak..Q4 Peak, En Yuksek Ay?, <12 serial dates for 2024>, Bucket, <12 serials for 2025>
-function parseSezonsallik(sheet) {
-  if (!sheet || sheet.length < 2) throw new Error('Sheet "Sezonsallık": empty or missing header');
+function parseSezonsallik(sheet, sheetName) {
+  sheetName = sheetName || 'Sezonsallık';
+  if (!sheet || sheet.length < 2) throw new Error(`Sheet "${sheetName}": empty or missing header`);
   // Header is at row 0 (no description row); data starts at row 1.
   const H = sheet[0];
-  const iK1 = mustCol(H, 'Kat 1', 'Sezonsallık');
-  const iK2 = mustCol(H, 'Kat 2', 'Sezonsallık');
-  const iK3 = mustCol(H, 'Kat 3', 'Sezonsallık');
-  const iKw = mustCol(H, 'Keyword', 'Sezonsallık');
-  const iA24 = mustCol(H, '2024 Avg. Search Volume', 'Sezonsallık');
-  const iA25 = mustCol(H, '2025 Avg. Search Volume', 'Sezonsallık');
-  const iYoY = mustCol(H, 'YoY change', 'Sezonsallık');
-  const iQ1 = mustCol(H, '2025 \nQ1 Peak', 'Sezonsallık');
-  const iQ2 = mustCol(H, '2025 \nQ2 Peak', 'Sezonsallık');
-  const iQ3 = mustCol(H, '2025 \nQ3 Peak', 'Sezonsallık');
-  const iQ4 = mustCol(H, '2025 \nQ4 Peak', 'Sezonsallık');
-  const iPeak = mustCol(H, 'En Yuksek Ay?', 'Sezonsallık');
-  const iBucket = mustCol(H, 'Bucket', 'Sezonsallık');
-  // 2024 months: 12 numeric headers immediately after iPeak up to (but not including) iBucket
+  const iK1 = mustCol(H, 'Kat 1', sheetName);
+  const iK2 = mustCol(H, 'Kat 2', sheetName);
+  const iK3 = mustCol(H, 'Kat 3', sheetName);
+  const iBrand = col(H, 'Marka');  // optional
+  const iCat = col(H, 'Katalog');  // optional
+  const iKw = mustCol(H, 'Keyword', sheetName);
+  const iA24 = mustCol(H, '2024 Avg. Search Volume', sheetName);
+  const iA25 = mustCol(H, '2025 Avg. Search Volume', sheetName);
+  const iYoY = mustCol(H, 'YoY change', sheetName);
+  const iQ1 = mustCol(H, '2025 \nQ1 Peak', sheetName);
+  const iQ2 = mustCol(H, '2025 \nQ2 Peak', sheetName);
+  const iQ3 = mustCol(H, '2025 \nQ3 Peak', sheetName);
+  const iQ4 = mustCol(H, '2025 \nQ4 Peak', sheetName);
+  const iPeak = mustCol(H, 'En Yuksek Ay?', sheetName);
+  const iBucket = mustCol(H, 'Bucket', sheetName);
   const m24Start = iPeak + 1;
-  const m24End = iBucket; // exclusive
+  const m24End = iBucket;
   if (m24End - m24Start !== 12) {
-    throw new Error(`Sezonsallık: expected 12 month columns between "En Yuksek Ay?" and "Bucket", got ${m24End - m24Start}`);
+    throw new Error(`${sheetName}: expected 12 month columns between "En Yuksek Ay?" and "Bucket", got ${m24End - m24Start}`);
   }
-  // 2025 months: 12 numeric headers after iBucket to end of row
   const m25Start = iBucket + 1;
 
   const out = [];
@@ -134,6 +135,8 @@ function parseSezonsallik(sheet) {
       k1: String(row[iK1] || ''),
       k2: String(row[iK2] || ''),
       k3: String(row[iK3] || ''),
+      brand: iBrand >= 0 ? String(row[iBrand] || '') : '',
+      catalog: iCat >= 0 ? String(row[iCat] || '') : '',
       kw: String(row[iKw]),
       a24: num(row[iA24]),
       a25: num(row[iA25]),
@@ -142,6 +145,39 @@ function parseSezonsallik(sheet) {
       peakSerial: num(row[iPeak]),
       m24: slice(row, m24Start, 12),
       bucket: String(row[iBucket] || ''),
+      m25: slice(row, m25Start, 12),
+    });
+  }
+  return out;
+}
+
+function parseBrands(sheet) {
+  if (!sheet || sheet.length < 2) return [];
+  const H = sheet[0];
+  const iBrand = mustCol(H, 'Marka', 'Brands');
+  const iCat = mustCol(H, 'Katalog', 'Brands');
+  const iA24 = mustCol(H, '2024 Avg', 'Brands');
+  const iA25 = mustCol(H, '2025 Avg', 'Brands');
+  const iYoY = mustCol(H, 'YoY Change', 'Brands');
+  const iQ1 = mustCol(H, '2025 \nQ1 Peak', 'Brands');
+  const iQ2 = mustCol(H, '2025 \nQ2 Peak', 'Brands');
+  const iQ3 = mustCol(H, '2025 \nQ3 Peak', 'Brands');
+  const iQ4 = mustCol(H, '2025 \nQ4 Peak', 'Brands');
+  const iPeak = mustCol(H, 'En Yuksek Ay?', 'Brands');
+  const m25Start = iPeak + 1;
+
+  const out = [];
+  for (let r = 1; r < sheet.length; r++) {
+    const row = sheet[r];
+    if (blank(row) || !row[iBrand]) continue;
+    out.push({
+      brand: String(row[iBrand]),
+      catalog: String(row[iCat] || ''),
+      a24: num(row[iA24]),
+      a25: num(row[iA25]),
+      yoy: num(row[iYoY]),
+      pq: [num(row[iQ1]) || 0, num(row[iQ2]) || 0, num(row[iQ3]) || 0, num(row[iQ4]) || 0],
+      peakSerial: num(row[iPeak]),
       m25: slice(row, m25Start, 12),
     });
   }
@@ -512,8 +548,14 @@ function main() {
   const price = parsePrice(sheets['Fiyat Intent'] || []);
   const volQ = parseVolQ(sheets['Hacme Göre Top KWs'] || []);
   const volQKws = parseVolQKws(sheets['Hacme Göre Top KWs'] || []);
+  // Özdilekte olmayan markalar (single-tab, sadece keyword listesi)
+  const outKeywords = sheets['Sezonsallık_Out']
+    ? parseSezonsallik(sheets['Sezonsallık_Out'], 'Sezonsallık_Out')
+    : [];
+  // Brand aggregate
+  const brands = sheets['Brands'] ? parseBrands(sheets['Brands']) : [];
 
-  console.log(`  keywords: ${keywords.length}`);
+  console.log(`  keywords: ${keywords.length}, outKeywords: ${outKeywords.length}, brands: ${brands.length}`);
   console.log(`  kat1Summary: ${kat1Summary.length}, kat1Monthly: ${kat1Monthly.length}, kat2Monthly: ${kat2Monthly.length}, kat3Monthly: ${kat3Monthly.length}`);
   console.log(`  trendRows: ${trendRows.length}, sezType: ${sezType.length}, peakQ: ${peakQ.length}`);
   console.log(`  smart: ${smart.length}, price: ${price.length}, volQ: ${volQ.length}, volQKws: ${volQKws.length}`);
@@ -532,6 +574,8 @@ function main() {
     kat1Monthly, kat2Monthly, kat3Monthly,
     trendRows, sezType, peakQ,
     smart, price, volQ, volQKws,
+    outKeywords,  // Özdilekte olmayan markalara ait keyword listesi
+    brands,       // Brand aggregate (tüm markalar, Var/Yok ayrımlı)
   };
 
   // Write dashboard.js

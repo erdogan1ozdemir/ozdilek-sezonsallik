@@ -1770,6 +1770,424 @@ window.TABS = (function(){
     );
   }
 
+  // === Out-of-Catalog Tab — Özdilekte Olmayan Markalar ===
+  function OutOfCatalogTab({setKeywordModal}) {
+    const OUT = D.outKeywords || [];
+    const [q, setQ] = React.useState('');
+    const [k1, setK1] = React.useState('');
+    const [brand, setBrand] = React.useState('');
+    const [trendFilter, setTrendFilter] = React.useState('');
+    const [sort, setSort] = React.useState({k:'a25', d:-1});
+    const [page, setPage] = React.useState(0);
+    const perPage = 50;
+
+    // Derived aggregates
+    const agg = React.useMemo(() => {
+      const total25 = OUT.reduce((s,k) => s + (k.a25 || 0) * 12, 0);
+      const total24 = OUT.reduce((s,k) => s + (k.a24 || 0) * 12, 0);
+      const yoy = total24 ? (total25 - total24) / total24 : 0;
+      const monthly25 = aggregateMonthly(OUT, 'm25');
+      const monthly24 = aggregateMonthly(OUT, 'm24');
+      const peakIdx = monthly25.indexOf(Math.max(...monthly25));
+      return { total25, total24, yoy, monthly25, monthly24, peakIdx };
+    }, []);
+
+    const risingCount = React.useMemo(() => OUT.filter(k => k.yoy > 0.05).length, []);
+    const fallingCount = React.useMemo(() => OUT.filter(k => k.yoy < -0.05).length, []);
+
+    const byK1 = React.useMemo(() => {
+      const m = {};
+      for (const k of OUT) m[k.k1] = (m[k.k1] || 0) + (k.a25 || 0) * 12;
+      return Object.entries(m).map(([k,v]) => ({label:k, value:v, color:katColor(k)})).sort((a,b)=>b.value-a.value);
+    }, []);
+
+    const topBrands = React.useMemo(() => {
+      const m = {};
+      for (const k of OUT) {
+        if (!k.brand) continue;
+        if (!m[k.brand]) m[k.brand] = { vol: 0, yoy24: 0, yoy25: 0, cnt: 0 };
+        m[k.brand].vol += (k.a25 || 0) * 12;
+        m[k.brand].yoy24 += (k.a24 || 0) * 12;
+        m[k.brand].yoy25 += (k.a25 || 0) * 12;
+        m[k.brand].cnt += 1;
+      }
+      return Object.entries(m)
+        .map(([brand, v]) => ({ brand, vol: v.vol, cnt: v.cnt, yoy: v.yoy24 ? (v.yoy25 - v.yoy24) / v.yoy24 : 0 }))
+        .sort((a,b) => b.vol - a.vol)
+        .slice(0, 20);
+    }, []);
+
+    const brandOptions = React.useMemo(() =>
+      [...new Set(OUT.map(k => k.brand).filter(Boolean))].sort(), []);
+    const k1Options = React.useMemo(() =>
+      [...new Set(OUT.map(k => k.k1).filter(Boolean))].sort(), []);
+
+    const filtered = React.useMemo(() => {
+      let rows = OUT;
+      const qq = q.trim().toLowerCase();
+      if (qq) rows = rows.filter(r => r.kw.toLowerCase().includes(qq));
+      if (k1) rows = rows.filter(r => r.k1 === k1);
+      if (brand) rows = rows.filter(r => r.brand === brand);
+      if (trendFilter === 'rising') rows = rows.filter(r => r.yoy > 0.05);
+      if (trendFilter === 'falling') rows = rows.filter(r => r.yoy < -0.05);
+      const s = sort.k, d = sort.d;
+      rows = [...rows].sort((a,b) => {
+        const av = a[s], bv = b[s];
+        if (av == null) return 1; if (bv == null) return -1;
+        return (av > bv ? 1 : av < bv ? -1 : 0) * d;
+      });
+      return rows;
+    }, [q, k1, brand, trendFilter, sort]);
+
+    React.useEffect(() => setPage(0), [q, k1, brand, trendFilter]);
+    const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
+    const totalPages = Math.ceil(filtered.length/perPage);
+
+    const th = (label, k, numCol=false) => h('th', {
+      className:numCol?'num':'',
+      style:{cursor:'pointer', userSelect:'none'},
+      onClick:()=>setSort({k, d: sort.k===k ? -sort.d : -1})
+    }, label, sort.k===k ? (sort.d>0?' ↑':' ↓') : '');
+
+    return h('div',null,
+      h(SectionHeader, {
+        accent:'coral',
+        icon: h('svg',{width:22,height:22,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},
+          h('circle',{cx:12,cy:12,r:10}), h('line',{x1:4.93,y1:4.93,x2:19.07,y2:19.07})
+        ),
+        title:'Özdilekte Olmayan Markalar',
+        desc:`Özdilek portföyünde bulunmayan markalara ait ${fmtFull(OUT.length)} keyword. Pazar payı fırsatı ve marka genişleme potansiyeli analizi.`
+      }),
+
+      // KPI strip
+      h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
+        h(Kpi,{label:'Toplam 2025 Hacim', value:fmtNum(agg.total25), chip:fmtPct(agg.yoy), chipClass:trendClass(agg.yoy), sub:`${fmtFull(OUT.length)} KW`, accent:true}),
+        h(Kpi,{label:'Marka Sayısı', value:fmtFull(brandOptions.length), sub:'farklı marka'}),
+        h(Kpi,{label:'Yükselen', value:fmtFull(risingCount), chip:'↑', chipClass:'pos', sub:'YoY > +5%'}),
+        h(Kpi,{label:'Düşen', value:fmtFull(fallingCount), chip:'↓', chipClass:'neg', sub:'YoY < -5%'}),
+        h(Kpi,{label:'Peak Ay', value:TR_MONTHS_LONG[agg.peakIdx], sub:fmtFull(agg.monthly25[agg.peakIdx]) + ' arama'}),
+      ),
+
+      // Monthly trend + category distribution
+      h('div',{className:'grid grid-main', style:{marginBottom:18}},
+        h('div',{className:'card'},
+          h('div',{className:'card-header'}, h('h3',null,'12 Aylık Hacim Trendi', h(InfoIcon,null,'Özdilekte olmayan markaların aylık arama hacmi. Gri: 2024, coral: 2025.'))),
+          h(LineChart,{series:[
+            {name:'2024', values:agg.monthly24, color:'#8A8A8A'},
+            {name:'2025', values:agg.monthly25, color:'#FF7B52', peakIdx:agg.peakIdx}
+          ], legend:true, height:220})
+        ),
+        h('div',{className:'card'},
+          h('div',{className:'card-header'}, h('h3',null,'Kategori Dağılımı', h(InfoIcon,null,'Özdilekte olmayan markaların Kat 1 bazında 2025 toplam hacim dağılımı.'))),
+          h(ShareBars,{rows: byK1.slice(0, 10)})
+        )
+      ),
+
+      // Top brands
+      topBrands.length > 0 && h('div',{className:'card', style:{marginBottom:18}},
+        h('div',{className:'card-header'}, h('h3',null,'En Yüksek Hacimli 20 Marka',
+          h(InfoIcon,null,'Özdilek portföyünde olmayan markaların 2025 toplam arama hacmine göre sıralaması. Yüksek hacimli olanlar portföy genişletme adayı olarak değerlendirilebilir.')
+        )),
+        h('div',{className:'tbl-wrap'},
+          h('table',{className:'tbl'},
+            h('thead',null, h('tr',null,
+              h('th',null,'#'), h('th',null,'Marka'), h('th',{className:'num'},'2025 Hacim'), h('th',{className:'num'},'KW'), h('th',{className:'num'},'YoY')
+            )),
+            h('tbody',null, topBrands.map((b,i) => h('tr',{key:i, className:'clickable', onClick:()=>setBrand(b.brand)},
+              h('td',{style:{width:40, color:'var(--ink-3)'}}, i+1),
+              h('td',null, h('strong',null, b.brand)),
+              h('td',{className:'num'}, fmtNum(b.vol)),
+              h('td',{className:'num'}, b.cnt),
+              h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy}))
+            )))
+          )
+        )
+      ),
+
+      // Filters + table
+      h('div',{className:'toolbar'},
+        h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:160}}),
+        h('select',{className:'select', value:k1, onChange:e=>setK1(e.target.value)},
+          h('option',{value:''}, 'Tüm Kat 1'),
+          k1Options.map(k => h('option',{key:k, value:k}, k))
+        ),
+        h('select',{className:'select', value:brand, onChange:e=>setBrand(e.target.value)},
+          h('option',{value:''}, 'Tüm Markalar'),
+          brandOptions.map(b => h('option',{key:b, value:b}, b))
+        ),
+        h('div',{className:'segmented'},
+          h('button',{className:trendFilter===''?'active':'', onClick:()=>setTrendFilter('')}, 'Tümü'),
+          h('button',{className:trendFilter==='rising'?'active':'', onClick:()=>setTrendFilter('rising')}, '↑ Yükselen'),
+          h('button',{className:trendFilter==='falling'?'active':'', onClick:()=>setTrendFilter('falling')}, '↓ Düşen')
+        ),
+        h('div',{style:{flex:1}}),
+        h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{setQ('');setK1('');setBrand('');setTrendFilter('');}}, '× Temizle'),
+        h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
+          const csv = toCSV(filtered, [
+            {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
+            {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'},
+            ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
+          ]);
+          downloadCSV(`${BRAND_SLUG}-out-of-catalog.csv`, csv);
+        }}, '↓ CSV'),
+      ),
+
+      (k1 || brand || trendFilter) && h('div',{className:'filter-chips'},
+        h('span',{className:'lbl'}, 'Aktif:'),
+        k1 && h('button',{className:'filter-chip', onClick:()=>setK1('')}, k1, h('span',{className:'x'},'×')),
+        brand && h('button',{className:'filter-chip', onClick:()=>setBrand('')}, 'Marka: '+brand, h('span',{className:'x'},'×')),
+        trendFilter && h('button',{className:'filter-chip', onClick:()=>setTrendFilter('')}, trendFilter==='rising'?'↑ Yükselen':'↓ Düşen', h('span',{className:'x'},'×'))
+      ),
+
+      h('div',{className:'card flush'},
+        h('div',{className:'tbl-wrap'},
+          h('table',{className:'tbl'},
+            h('thead',null, h('tr',null,
+              th('Keyword','kw'),
+              th('Marka','brand'),
+              th('Kat 1','k1'),
+              th('Kat 2','k2'),
+              th('2024','a24',true),
+              th('2025','a25',true),
+              th('YoY','yoy',true),
+              h('th',null,'12 Ay'),
+              h('th',null,'Peak')
+            )),
+            h('tbody',null,
+              pageRows.length === 0 && h('tr',null, h('td',{colSpan:9, className:'empty'}, 'Sonuç bulunamadı')),
+              pageRows.map((r,i) => {
+                const pi = r.m25 ? r.m25.indexOf(Math.max(...r.m25)) : -1;
+                return h('tr',{key:page*perPage+i, className:'clickable', onClick:()=>setKeywordModal(r)},
+                  h('td',{className:'kw-cell', style:{maxWidth:200}}, r.kw),
+                  h('td',{style:{fontSize:11, fontWeight:500}}, r.brand || '-'),
+                  h('td',{style:{fontSize:11}},
+                    h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+                      h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(r.k1),flexShrink:0}}),
+                      h('span',null, r.k1)
+                    )
+                  ),
+                  h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
+                  h('td',{className:'num'}, fmtFull(r.a24)),
+                  h('td',{className:'num'}, fmtFull(r.a25)),
+                  h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
+                  h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
+                  h('td',null, pi>=0 ? h('span',{className:'pill neu'}, TR_MONTHS[pi]) : '-')
+                );
+              })
+            )
+          )
+        ),
+        totalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
+          h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Önceki'),
+          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages} · ${fmtFull(filtered.length)} KW`),
+          h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1, p+1))}, 'Sonraki →')
+        )
+      )
+    );
+  }
+
+  // === Brand Tab ===
+  function BrandTab({setKeywordModal}) {
+    const BR = D.brands || [];
+    const [q, setQ] = React.useState('');
+    const [catFilter, setCatFilter] = React.useState('');  // '' | 'Var' | 'Yok'
+    const [sort, setSort] = React.useState({k:'a25', d:-1});
+    const [page, setPage] = React.useState(0);
+    const perPage = 50;
+    const [selectedBrand, setSelectedBrand] = React.useState(null);
+
+    const filtered = React.useMemo(() => {
+      let rows = BR;
+      const qq = q.trim().toLowerCase();
+      if (qq) rows = rows.filter(r => r.brand.toLowerCase().includes(qq));
+      if (catFilter) rows = rows.filter(r => r.catalog === catFilter);
+      const s = sort.k, d = sort.d;
+      rows = [...rows].sort((a,b) => {
+        const av = a[s], bv = b[s];
+        if (av == null) return 1; if (bv == null) return -1;
+        return (av > bv ? 1 : av < bv ? -1 : 0) * d;
+      });
+      return rows;
+    }, [q, catFilter, sort]);
+
+    React.useEffect(() => setPage(0), [q, catFilter]);
+    const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
+    const totalPages = Math.ceil(filtered.length/perPage);
+
+    // KPIs
+    const varCount = BR.filter(b => b.catalog === 'Var').length;
+    const yokCount = BR.filter(b => b.catalog === 'Yok').length;
+    const totalVol25 = BR.reduce((s,b) => s + (b.a25 || 0) * 12, 0);
+    const topBrand = BR.length ? [...BR].sort((a,b)=>(b.a25||0)-(a.a25||0))[0] : null;
+    const avgYoY = BR.length ? BR.reduce((s,b)=>s+(b.yoy||0),0) / BR.length : 0;
+
+    // Top 10 for bar chart
+    const top10 = React.useMemo(() => {
+      const src = catFilter ? BR.filter(b => b.catalog === catFilter) : BR;
+      return [...src].sort((a,b)=>(b.a25||0)-(a.a25||0)).slice(0, 10);
+    }, [catFilter]);
+    const top10Max = top10.length ? Math.max(...top10.map(b => b.a25 || 0)) : 1;
+
+    // Keywords for selected brand
+    const selectedKws = React.useMemo(() => {
+      if (!selectedBrand) return [];
+      const pool = (D.keywords || []).concat(D.outKeywords || []);
+      return pool.filter(k => (k.brand || '').toLowerCase() === selectedBrand.toLowerCase())
+        .sort((a,b) => (b.a25||0) - (a.a25||0));
+    }, [selectedBrand]);
+
+    const th = (label, k, numCol=false) => h('th', {
+      className:numCol?'num':'',
+      style:{cursor:'pointer', userSelect:'none'},
+      onClick:()=>setSort({k, d: sort.k===k ? -sort.d : -1})
+    }, label, sort.k===k ? (sort.d>0?' ↑':' ↓') : '');
+
+    return h('div',null,
+      h(SectionHeader, {
+        accent:'blue',
+        icon: h('svg',{width:22,height:22,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},
+          h('path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z'}),
+          h('line',{x1:7,y1:7,x2:7.01,y2:7})
+        ),
+        title:'Brand Intelligence',
+        desc:`${fmtFull(BR.length)} marka · ${fmtFull(varCount)} Özdilek portföyünde · ${fmtFull(yokCount)} portföy dışı. Hacim ve büyüme bazında marka karşılaştırması.`
+      }),
+
+      h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
+        h(Kpi,{label:'Toplam Marka', value:fmtFull(BR.length), sub:`${varCount} Var · ${yokCount} Yok`, accent:true}),
+        h(Kpi,{label:'Toplam 2025 Hacim', value:fmtNum(totalVol25), chip:fmtPct(avgYoY), chipClass:trendClass(avgYoY), sub:'markaların toplamı'}),
+        h(Kpi,{label:'Özdilek Portföyü', value:fmtFull(varCount), sub:BR.length ? (varCount/BR.length*100).toFixed(0)+'% kapsama' : '—'}),
+        h(Kpi,{label:'Portföy Dışı', value:fmtFull(yokCount), sub:BR.length ? (yokCount/BR.length*100).toFixed(0)+'% fırsat' : '—'}),
+        topBrand && h(Kpi,{label:'En Büyük Marka', value:topBrand.brand, sub:fmtNum((topBrand.a25||0)*12)+' / 2025'}),
+      ),
+
+      // Filter bar
+      h('div',{className:'toolbar', style:{marginBottom:14}},
+        h('input',{className:'input input-search', placeholder:'Marka ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:180}}),
+        h('div',{className:'segmented'},
+          h('button',{className:catFilter===''?'active':'', onClick:()=>setCatFilter('')}, 'Tümü'),
+          h('button',{className:catFilter==='Var'?'active':'', onClick:()=>setCatFilter('Var')}, 'Özdilekte Var'),
+          h('button',{className:catFilter==='Yok'?'active':'', onClick:()=>setCatFilter('Yok')}, 'Özdilekte Yok')
+        ),
+        h('div',{style:{flex:1}}),
+        h('span',{className:'txt-3', style:{fontSize:12}}, fmtFull(filtered.length)+' marka'),
+        h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
+          const csv = toCSV(filtered, [
+            {label:'Marka',key:'brand'}, {label:'Katalog',key:'catalog'},
+            {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'},
+            {label:'Peak Serial',key:'peakSerial'},
+            ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25 ? r.m25[i] : ''}))
+          ]);
+          downloadCSV(`${BRAND_SLUG}-brands.csv`, csv);
+        }}, '↓ CSV'),
+      ),
+
+      // Top 10 bar chart
+      top10.length > 0 && h('div',{className:'card', style:{marginBottom:18}},
+        h('div',{className:'card-header'}, h('h3',null,
+          'Top 10 Marka · 2025 Hacim ',
+          catFilter && h('span',{className:'txt-3', style:{fontSize:12,marginLeft:8}}, '(' + (catFilter === 'Var' ? 'Özdilekte Var' : 'Özdilekte Yok') + ')')
+        )),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:8,padding:14}},
+          top10.map((b,i) => {
+            const vol = (b.a25 || 0) * 12;
+            const pct = top10Max ? ((b.a25 || 0) / top10Max * 100) : 0;
+            const color = b.catalog === 'Var' ? '#59A14F' : b.catalog === 'Yok' ? '#E15759' : '#B07AA1';
+            return h('div',{key:i, className:'clickable', onClick:()=>setSelectedBrand(b.brand), style:{cursor:'pointer'}},
+              h('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:3,fontSize:12}},
+                h('strong',{style:{flex:1}}, (i+1)+'. '+b.brand),
+                h('span',{className:'pill '+(b.catalog==='Var'?'pos':b.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, b.catalog || '-'),
+                h('span',{className:'num', style:{fontWeight:600}}, fmtNum(vol)),
+                h(YoYPill,{yoy:b.yoy})
+              ),
+              h('div',{style:{height:10,background:'var(--line)',borderRadius:4,overflow:'hidden'}},
+                h('div',{style:{height:'100%',width:pct+'%',background:color,borderRadius:4}})
+              )
+            );
+          })
+        )
+      ),
+
+      // Brand table
+      h('div',{className:'card flush', style:{marginBottom:18}},
+        h('div',{className:'tbl-wrap'},
+          h('table',{className:'tbl'},
+            h('thead',null, h('tr',null,
+              th('Marka','brand'),
+              h('th',null,'Katalog'),
+              th('2024','a24',true),
+              th('2025','a25',true),
+              th('YoY','yoy',true),
+              h('th',null,'12 Ay'),
+              h('th',null,'Peak')
+            )),
+            h('tbody',null,
+              pageRows.length === 0 && h('tr',null, h('td',{colSpan:7, className:'empty'}, 'Sonuç bulunamadı')),
+              pageRows.map((b,i) => {
+                const pi = b.m25 ? b.m25.indexOf(Math.max(...b.m25)) : -1;
+                return h('tr',{key:page*perPage+i, className:'clickable', onClick:()=>setSelectedBrand(b.brand)},
+                  h('td',null, h('strong',null, b.brand)),
+                  h('td',null, h('span',{className:'pill '+(b.catalog==='Var'?'pos':b.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, b.catalog || '-')),
+                  h('td',{className:'num'}, fmtFull(b.a24)),
+                  h('td',{className:'num'}, fmtFull(b.a25)),
+                  h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
+                  h('td',{style:{width:110}}, b.m25 ? h(Sparkline,{values:b.m25, w:100, h:26}) : ''),
+                  h('td',null, pi>=0 ? h('span',{className:'pill neu'}, TR_MONTHS[pi]) : '-')
+                );
+              })
+            )
+          )
+        ),
+        totalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
+          h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Önceki'),
+          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages}`),
+          h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1, p+1))}, 'Sonraki →')
+        )
+      ),
+
+      // Selected brand drill-down
+      selectedBrand && h('div',{className:'card', style:{marginBottom:18}},
+        h('div',{className:'card-header', style:{alignItems:'center'}},
+          h('h3',{style:{flex:1}}, 'Marka Detayı · ', h('strong',{style:{color:'var(--coral)'}}, selectedBrand),
+            h('span',{className:'txt-3', style:{fontSize:12, marginLeft:10}}, fmtFull(selectedKws.length)+' keyword')
+          ),
+          h('button',{className:'chip-btn', style:{padding:'4px 10px',borderRadius:999}, onClick:()=>setSelectedBrand(null)}, '× Kapat')
+        ),
+        selectedKws.length === 0
+          ? h('div',{className:'empty', style:{padding:20}}, 'Bu markaya ait keyword bulunamadı')
+          : h('div',{className:'tbl-wrap'},
+              h('table',{className:'tbl'},
+                h('thead',null, h('tr',null,
+                  h('th',null,'Keyword'),
+                  h('th',null,'Kat 1'),
+                  h('th',null,'Katalog'),
+                  h('th',{className:'num'},'2024'),
+                  h('th',{className:'num'},'2025'),
+                  h('th',{className:'num'},'YoY'),
+                  h('th',null,'12 Ay')
+                )),
+                h('tbody',null,
+                  selectedKws.slice(0, 100).map((r,i) => h('tr',{key:i, className:'clickable', onClick:()=>setKeywordModal(r)},
+                    h('td',{className:'kw-cell'}, r.kw),
+                    h('td',{style:{fontSize:11}},
+                      h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+                        h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(r.k1),flexShrink:0}}),
+                        h('span',null, r.k1)
+                      )
+                    ),
+                    h('td',null, h('span',{className:'pill '+(r.catalog==='Var'?'pos':r.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, r.catalog || '-')),
+                    h('td',{className:'num'}, fmtFull(r.a24)),
+                    h('td',{className:'num'}, fmtFull(r.a25)),
+                    h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
+                    h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26}))
+                  ))
+                )
+              )
+            )
+      )
+    );
+  }
+
   // === Keyword Modal ===
   function KeywordModal({kw, onClose}) {
     const peakIdx = kw.m25 ? kw.m25.indexOf(Math.max(...kw.m25)) : -1;
@@ -1844,5 +2262,5 @@ window.TABS = (function(){
     );
   }
 
-  return { OzetTab, KategorilerTab, KeywordTab, TrendlerTab, FiyatTab, KeywordModal, KAT1_COLORS };
+  return { OzetTab, KategorilerTab, KeywordTab, TrendlerTab, FiyatTab, OutOfCatalogTab, BrandTab, KeywordModal, KAT1_COLORS };
 })();

@@ -1,6 +1,6 @@
 // Main App
 (function(){
-  const { OzetTab, KategorilerTab, KeywordTab, TrendlerTab, FiyatTab, KeywordModal } = window.TABS;
+  const { OzetTab, KategorilerTab, KeywordTab, TrendlerTab, FiyatTab, OutOfCatalogTab, BrandTab, KeywordModal } = window.TABS;
   const h = React.createElement;
 
   const B = window.BRAND || {};
@@ -162,10 +162,12 @@
 
     const tabs = [
       { id:'ozet', label:'Özet', badge:null },
-      { id:'kategoriler', label:'Kategoriler', badge:'185' },
+      { id:'kategoriler', label:'Kategoriler', badge: (window.DATA.kat2Monthly.length + window.DATA.kat3Monthly.length).toString() },
       { id:'keyword', label:'Keyword', badge: window.DATA.keywords.length.toLocaleString('tr-TR') },
       { id:'trendler', label:'Trendler', badge:null },
       { id:'fiyat', label:'Fiyat Intent', badge:null },
+      { id:'out', label:'Özdilekte Olmayan Markalar', badge: (window.DATA.outKeywords || []).length.toLocaleString('tr-TR') },
+      { id:'brand', label:'Brand', badge: (window.DATA.brands || []).length.toLocaleString('tr-TR') },
     ];
 
     const activeTab = tab;
@@ -181,6 +183,8 @@
         case 'keyword': return h(KeywordTab, {setKeywordModal, initialFilter: keywordInitFilter, clearInitialFilter: () => setKeywordInitFilter(null), globalFilter});
         case 'trendler': return h(TrendlerTab, {setKeywordModal, onNavigateKw, globalFilter});
         case 'fiyat': return h(FiyatTab, {setKeywordModal, globalFilter});
+        case 'out': return h(OutOfCatalogTab, {setKeywordModal});
+        case 'brand': return h(BrandTab, {setKeywordModal});
       }
     }
 
