@@ -1771,34 +1771,47 @@ window.TABS = (function(){
   }
 
   // === Out-of-Catalog Tab — Özdilekte Olmayan Markalar ===
-  function OutOfCatalogTab({setKeywordModal}) {
+  function OutOfCatalogTab({setKeywordModal, globalFilter}) {
     const OUT = D.outKeywords || [];
+    const gK1 = globalFilter?.globalK1 || [];
+    const gK2 = globalFilter?.globalK2 || [];
+    const gK3 = globalFilter?.globalK3 || [];
+    const gBrand = globalFilter?.globalBrand || [];
+
     const [q, setQ] = React.useState('');
-    const [k1, setK1] = React.useState('');
-    const [brand, setBrand] = React.useState('');
     const [trendFilter, setTrendFilter] = React.useState('');
     const [sort, setSort] = React.useState({k:'a25', d:-1});
     const [brandSort, setBrandSort] = React.useState({k:'sum25', d:-1});
     const [brandQ, setBrandQ] = React.useState('');
+    const [expandedBrands, setExpandedBrands] = React.useState(() => new Set());
     const [page, setPage] = React.useState(0);
     const [brandPage, setBrandPage] = React.useState(0);
     const perPage = 50;
     const brandsPerPage = 25;
-    const chartsRef = React.useRef(null);
 
-    // Filter options
-    const brandOptions = React.useMemo(() =>
-      [...new Set(OUT.map(k => k.brand).filter(Boolean))].sort(), []);
-    const k1Options = React.useMemo(() =>
-      [...new Set(OUT.map(k => k.k1).filter(Boolean))].sort(), []);
+    const toggleExpand = (b) => {
+      setExpandedBrands(prev => {
+        const next = new Set(prev);
+        if (next.has(b)) next.delete(b); else next.add(b);
+        return next;
+      });
+    };
 
-    // Top-level filter — only k1 + brand affect KPI/chart area (not the keyword search)
+    // Global filter sets
+    const k1Set = gK1.length ? new Set(gK1) : null;
+    const k2Set = gK2.length ? new Set(gK2) : null;
+    const k3Set = gK3.length ? new Set(gK3) : null;
+    const brandSet = gBrand.length ? new Set(gBrand) : null;
+
+    // Scope = all OUT filtered by global Kat + Brand
     const scopedKws = React.useMemo(() => {
       let rows = OUT;
-      if (k1) rows = rows.filter(r => r.k1 === k1);
-      if (brand) rows = rows.filter(r => r.brand === brand);
+      if (k1Set) rows = rows.filter(r => k1Set.has(r.k1));
+      if (k2Set) rows = rows.filter(r => k2Set.has(r.k2));
+      if (k3Set) rows = rows.filter(r => k3Set.has(r.k3));
+      if (brandSet) rows = rows.filter(r => brandSet.has(r.brand));
       return rows;
-    }, [k1, brand]);
+    }, [gK1, gK2, gK3, gBrand]);
 
     // Aggregates (filter-aware)
     const agg = React.useMemo(() => {
@@ -1814,23 +1827,33 @@ window.TABS = (function(){
       return { total25, total24, yoy, monthly25, monthly24, peakIdx, rising, falling, brands, count: scopedKws.length };
     }, [scopedKws]);
 
-    // Kategori Dağılımı (filter-aware — brand seçilince o markanın Kat 1 payını gösterir)
+    // Kategori Dağılımı (Kat 1 — brand-aware)
     const byK1 = React.useMemo(() => {
       const m = {};
       for (const k of scopedKws) m[k.k1] = (m[k.k1] || 0) + (k.a25 || 0) * 12;
       return Object.entries(m).map(([k,v]) => ({label:k, value:v, color:katColor(k)})).sort((a,b)=>b.value-a.value);
     }, [scopedKws]);
 
-    // All brands with rich stats (not just top 20)
+    // NEW: Alt Kategori Dağılımı (Kat 2 — 12-aylık trendin altında gösterilir)
+    const byK2 = React.useMemo(() => {
+      const m = {};
+      for (const k of scopedKws) {
+        const key = k.k2 || '(boş)';
+        m[key] = (m[key] || 0) + (k.a25 || 0) * 12;
+      }
+      return Object.entries(m).map(([k,v]) => ({label:k, value:v, color:'var(--coral)'})).sort((a,b)=>b.value-a.value).slice(0, 10);
+    }, [scopedKws]);
+
+    // All brands (from scoped keywords)
     const allBrands = React.useMemo(() => {
       const m = {};
-      for (const k of OUT) {
+      for (const k of scopedKws) {
         if (!k.brand) continue;
         const key = k.brand;
         if (!m[key]) m[key] = {
           brand: key, count: 0, sum24: 0, sum25: 0,
           m24: new Array(12).fill(0), m25: new Array(12).fill(0),
-          k1vol: {}
+          k1vol: {}, k2vol: {}, kws: []
         };
         const b = m[key];
         b.count += 1;
@@ -1841,6 +1864,15 @@ window.TABS = (function(){
           b.m25[i] += k.m25[i] || 0;
         }
         b.k1vol[k.k1] = (b.k1vol[k.k1] || 0) + (k.a25 || 0) * 12;
+        const k2key = k.k2 || '(boş)';
+        if (!b.k2vol[k2key]) b.k2vol[k2key] = { vol: 0, count: 0, sum24: 0, sum25: 0, m25: new Array(12).fill(0), yoyNum: 0, yoyDen: 0, kws: [] };
+        b.k2vol[k2key].vol += (k.a25 || 0) * 12;
+        b.k2vol[k2key].count += 1;
+        b.k2vol[k2key].sum24 += (k.a24 || 0) * 12;
+        b.k2vol[k2key].sum25 += (k.a25 || 0) * 12;
+        for (let i = 0; i < 12; i++) b.k2vol[k2key].m25[i] += k.m25[i] || 0;
+        b.k2vol[k2key].kws.push(k);
+        b.kws.push(k);
       }
       return Object.values(m).map(b => {
         const yoy = b.sum24 ? (b.sum25 - b.sum24) / b.sum24 : 0;
@@ -1848,11 +1880,20 @@ window.TABS = (function(){
         const topK1Entries = Object.entries(b.k1vol).sort((a,b) => b[1] - a[1]);
         const topK1 = topK1Entries[0]?.[0] || '';
         const topK1Share = b.sum25 && topK1Entries[0] ? topK1Entries[0][1] / b.sum25 : 0;
-        return { ...b, yoy, peakI, topK1, topK1Share };
+        // Build k2 rows sorted
+        const k2Rows = Object.entries(b.k2vol).map(([k2, v]) => ({
+          k2,
+          count: v.count,
+          sum24: v.sum24,
+          sum25: v.sum25,
+          yoy: v.sum24 ? (v.sum25 - v.sum24) / v.sum24 : 0,
+          m25: v.m25,
+          topKws: [...v.kws].sort((a,b) => (b.a25||0) - (a.a25||0)).slice(0, 3)
+        })).sort((a,b) => b.sum25 - a.sum25);
+        return { ...b, yoy, peakI, topK1, topK1Share, k2Rows };
       });
-    }, []);
+    }, [scopedKws]);
 
-    // Filtered + sorted brand list for the table
     const brandRows = React.useMemo(() => {
       let rows = allBrands;
       const qq = brandQ.trim().toLowerCase();
@@ -1867,11 +1908,11 @@ window.TABS = (function(){
       return rows;
     }, [allBrands, brandQ, brandSort]);
 
-    React.useEffect(() => setBrandPage(0), [brandQ, brandSort]);
+    React.useEffect(() => setBrandPage(0), [brandQ, brandSort, scopedKws]);
     const brandPageRows = brandRows.slice(brandPage*brandsPerPage, (brandPage+1)*brandsPerPage);
     const brandTotalPages = Math.ceil(brandRows.length/brandsPerPage);
 
-    // Keyword filter (includes search, used only by bottom keyword table)
+    // Keyword filter (includes search)
     const filtered = React.useMemo(() => {
       let rows = scopedKws;
       const qq = q.trim().toLowerCase();
@@ -1887,7 +1928,7 @@ window.TABS = (function(){
       return rows;
     }, [scopedKws, q, trendFilter, sort]);
 
-    React.useEffect(() => setPage(0), [q, k1, brand, trendFilter]);
+    React.useEffect(() => setPage(0), [q, trendFilter, scopedKws]);
     const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
     const totalPages = Math.ceil(filtered.length/perPage);
 
@@ -1903,13 +1944,8 @@ window.TABS = (function(){
       onClick:()=>setBrandSort({k, d: brandSort.k===k ? -brandSort.d : -1})
     }, label, brandSort.k===k ? (brandSort.d>0?' ↑':' ↓') : '');
 
-    const selectBrand = (b) => {
-      setBrand(b);
-      // Chart bölgesine scroll — seçilen markanın trend + kategori payı yukarıda
-      setTimeout(() => {
-        chartsRef.current?.scrollIntoView({behavior:'smooth', block:'start'});
-      }, 0);
-    };
+    const hasFilterActive = gK1.length || gK2.length || gK3.length || gBrand.length;
+    const singleBrand = gBrand.length === 1 ? gBrand[0] : null;
 
     return h('div',null,
       h(SectionHeader, {
@@ -1918,74 +1954,69 @@ window.TABS = (function(){
           h('circle',{cx:12,cy:12,r:10}), h('line',{x1:4.93,y1:4.93,x2:19.07,y2:19.07})
         ),
         title:'Özdilekte Olmayan Markalar',
-        desc:`Özdilek portföyünde bulunmayan markalara ait ${fmtFull(OUT.length)} keyword · ${fmtFull(brandOptions.length)} marka. Pazar payı fırsatı ve marka genişleme potansiyeli analizi.`
+        desc: hasFilterActive
+          ? `Filtre aktif · ${fmtNum(scopedKws.length)} keyword · ${fmtNum(agg.brands)} marka · ${fmtNum(agg.total25)} 2025 hacim`
+          : `Özdilek portföyünde bulunmayan markalara ait ${fmtNum(OUT.length)} keyword. Pazar payı fırsatı ve marka genişleme potansiyeli analizi.`
       }),
-
-      // Top filter — Kat 1 + Marka (ana filtre, KPI/chart/tablo hepsini etkiler)
-      h('div',{className:'toolbar', style:{marginBottom:14}},
-        h('strong',{style:{fontSize:12, color:'var(--ink-2)', marginRight:4}}, 'Filtre:'),
-        h('select',{className:'select', value:k1, onChange:e=>setK1(e.target.value), style:{minWidth:180}},
-          h('option',{value:''}, 'Tüm Kat 1 (' + k1Options.length + ')'),
-          k1Options.map(k => h('option',{key:k, value:k}, k))
-        ),
-        h('select',{className:'select', value:brand, onChange:e=>setBrand(e.target.value), style:{minWidth:200}},
-          h('option',{value:''}, 'Tüm Markalar (' + brandOptions.length + ')'),
-          brandOptions.map(b => h('option',{key:b, value:b}, b))
-        ),
-        (k1 || brand) && h('button',{
-          className:'chip-btn', style:{padding:'6px 12px',borderRadius:999},
-          onClick:()=>{setK1(''); setBrand('');}
-        }, '× Filtreyi Temizle'),
-        h('div',{style:{flex:1}}),
-        brand && h('span',{className:'txt-3', style:{fontSize:12}},
-          `"${brand}" · ${fmtFull(scopedKws.length)} keyword · ${fmtNum(agg.total25)} hacim`
-        )
-      ),
-
-      // Anchor for scroll
-      h('div',{ref:chartsRef}),
 
       // KPI strip (filter-aware)
       h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
         h(Kpi,{
-          label: brand ? 'Seçili Marka Hacmi' : (k1 ? 'Filtreli 2025 Hacim' : 'Toplam 2025 Hacim'),
-          value: fmtFull(agg.total25),
+          label: singleBrand ? 'Seçili Marka Hacmi' : (hasFilterActive ? 'Filtreli 2025 Hacim' : 'Toplam 2025 Hacim'),
+          value: fmtNum(agg.total25),
           chip: fmtPct(agg.yoy), chipClass: trendClass(agg.yoy),
-          sub: `${fmtFull(agg.count)} KW`, accent: true
+          sub: `${fmtNum(agg.count)} KW`, accent: true
         }),
-        h(Kpi,{label:'Marka Sayısı', value:fmtFull(agg.brands), sub: brand ? 'seçili' : 'farklı marka'}),
-        h(Kpi,{label:'Yükselen', value:fmtFull(agg.rising), chip:'↑', chipClass:'pos', sub:'YoY > +5%'}),
-        h(Kpi,{label:'Düşen', value:fmtFull(agg.falling), chip:'↓', chipClass:'neg', sub:'YoY < -5%'}),
+        h(Kpi,{label:'Marka Sayısı', value:fmtNum(agg.brands), sub: singleBrand ? 'seçili' : 'farklı marka'}),
+        h(Kpi,{label:'Yükselen', value:fmtNum(agg.rising), chip:'↑', chipClass:'pos', sub:'YoY > +5%'}),
+        h(Kpi,{label:'Düşen', value:fmtNum(agg.falling), chip:'↓', chipClass:'neg', sub:'YoY < -5%'}),
         h(Kpi,{
           label:'Peak Ay',
           value: agg.peakIdx >= 0 ? TR_MONTHS_LONG[agg.peakIdx] : '-',
-          sub: agg.peakIdx >= 0 ? fmtFull(agg.monthly25[agg.peakIdx]) + ' arama' : ''
+          sub: agg.peakIdx >= 0 ? fmtNum(agg.monthly25[agg.peakIdx]) + ' arama' : ''
         }),
       ),
 
-      // 12 aylık trend + Kategori Dağılımı (brand-aware)
+      // Grid-main: left column stacked (12 aylık trend + Alt kategori), right column (Kat 1 dağılımı)
       h('div',{className:'grid grid-main', style:{marginBottom:18}},
-        h('div',{className:'card'},
-          h('div',{className:'card-header'}, h('h3',null,
-            brand ? `12 Aylık Trend · ${brand}` : '12 Aylık Hacim Trendi',
-            h(InfoIcon,null, brand
-              ? `${brand} markasının aylık toplam arama hacmi. Gri: 2024, coral: 2025.`
-              : 'Özdilekte olmayan markaların aylık arama hacmi. Gri: 2024, coral: 2025. Marka filtresi seçildiğinde o markanın ritmi gösterilir.'
-            )
-          )),
-          agg.total25 > 0
-            ? h(LineChart,{series:[
-                {name:'2024', values:agg.monthly24, color:'#8A8A8A'},
-                {name:'2025', values:agg.monthly25, color:'#FF7B52', peakIdx:agg.peakIdx}
-              ], legend:true, height:220})
-            : h('div',{className:'empty', style:{padding:30}}, 'Veri yok')
+        h('div',{style:{display:'flex', flexDirection:'column', gap:14, minWidth:0}},
+          // 12 aylık trend
+          h('div',{className:'card'},
+            h('div',{className:'card-header'}, h('h3',null,
+              singleBrand ? `12 Aylık Trend · ${singleBrand}` : '12 Aylık Hacim Trendi',
+              h(InfoIcon,null, singleBrand
+                ? `${singleBrand} markasının aylık toplam arama hacmi. Gri: 2024, coral: 2025.`
+                : 'Özdilekte olmayan markaların aylık arama hacmi. Gri: 2024, coral: 2025. Filtreye göre dinamik güncellenir.'
+              )
+            )),
+            agg.total25 > 0
+              ? h(LineChart,{series:[
+                  {name:'2024', values:agg.monthly24, color:'#8A8A8A'},
+                  {name:'2025', values:agg.monthly25, color:'#FF7B52', peakIdx:agg.peakIdx}
+                ], legend:true, height:200})
+              : h('div',{className:'empty', style:{padding:30}}, 'Veri yok')
+          ),
+          // NEW: Alt kategori (Kat 2) dağılımı
+          h('div',{className:'card'},
+            h('div',{className:'card-header'}, h('h3',null,
+              singleBrand ? `Alt Kategori Payı · ${singleBrand}` : 'Alt Kategori Dağılımı (Kat 2)',
+              h(InfoIcon,null, singleBrand
+                ? `${singleBrand} markasının 2025 arama hacminin Kat 2 (alt kategori) bazında dağılımı. Markanın hangi alt ürün gruplarında güçlü olduğunu gösterir.`
+                : 'Tüm out-of-catalog keyword\'lerin Kat 2 bazında 2025 hacim dağılımı (top 10). Marka filtresi seçince o markanın alt kategori kırılımı gösterilir.'
+              )
+            )),
+            byK2.length > 0
+              ? h(ShareBars,{rows: byK2})
+              : h('div',{className:'empty', style:{padding:30}}, 'Veri yok')
+          )
         ),
+        // Kategori (Kat 1) dağılımı - tam yükseklik
         h('div',{className:'card'},
           h('div',{className:'card-header'}, h('h3',null,
-            brand ? `Kategori Payı · ${brand}` : 'Kategori Dağılımı',
-            h(InfoIcon,null, brand
-              ? `${brand} markasının 2025 arama hacminin Kat 1 bazında dağılımı. Markanın hangi kategorilerde güçlü olduğunu gösterir.`
-              : 'Özdilekte olmayan tüm markaların Kat 1 bazında 2025 toplam hacim dağılımı. Yukarıdan marka seçince o markanın kategori payını görebilirsiniz.'
+            singleBrand ? `Kategori Payı · ${singleBrand}` : 'Kategori Dağılımı (Kat 1)',
+            h(InfoIcon,null, singleBrand
+              ? `${singleBrand} markasının 2025 arama hacminin Kat 1 bazında dağılımı.`
+              : 'Özdilekte olmayan tüm markaların Kat 1 bazında 2025 toplam hacim dağılımı.'
             )
           )),
           byK1.length > 0
@@ -1994,16 +2025,16 @@ window.TABS = (function(){
         )
       ),
 
-      // Tüm Markalar (all brands, sortable, paginated)
+      // Tüm Markalar (all brands, sortable, paginated, expandable)
       h('div',{className:'card flush', style:{marginBottom:18}},
         h('div',{className:'card-title-row', style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
           h('h3',{style:{flex:1,minWidth:200}},
             'Tüm Markalar · Detaylı Analiz',
             h(InfoIcon,null,
-              h('strong',null,'Ne gösterir? '),'Özdilek portföyünde bulunmayan tüm markaların keyword sayısı, 2024/2025 hacim, YoY büyüme, peak ayı ve ana kategori bilgisi.',
-              h('br'),h('br'),h('strong',null,'Nasıl kullanılır? '),'Başlıklara tıklayarak sırala. Bir marka satırına tıkla → üst filtreye o marka uygulanır ve chart bölümüne scroll olur.'
+              h('strong',null,'Ne gösterir? '),'Özdilek portföyünde bulunmayan markaların keyword sayısı, 2024/2025 hacim, YoY, peak ay ve ana kategori bilgisi.',
+              h('br'),h('br'),h('strong',null,'Nasıl kullanılır? '),'Satıra tıkla → alt kategori (Kat 2) kırılımı pivot gibi açılır. Başlıklara tıklayarak sırala. Üstten Marka filtresi ile birden fazla marka seçilebilir.'
             ),
-            h('span',{className:'txt-3', style:{fontSize:11, marginLeft:8}}, fmtFull(brandRows.length)+' marka')
+            h('span',{className:'txt-3', style:{fontSize:11, marginLeft:8}}, fmtNum(brandRows.length)+' marka')
           ),
           h('input',{
             className:'input input-search', placeholder:'Marka ara…',
@@ -2030,6 +2061,7 @@ window.TABS = (function(){
         h('div',{className:'tbl-wrap'},
           h('table',{className:'tbl'},
             h('thead',null, h('tr',null,
+              h('th',{style:{width:26}}, ''),
               h('th',null,'#'),
               bth('Marka','brand'),
               bth('KW','count',true),
@@ -2042,35 +2074,86 @@ window.TABS = (function(){
               h('th',{className:'num'},'Kat Payı')
             )),
             h('tbody',null,
-              brandPageRows.length === 0 && h('tr',null, h('td',{colSpan:10, className:'empty'}, 'Sonuç bulunamadı')),
-              brandPageRows.map((b,i) => h('tr',{key:i, className:'clickable', onClick:()=>selectBrand(b.brand)},
-                h('td',{style:{width:40, color:'var(--ink-3)', fontSize:11}}, brandPage*brandsPerPage + i + 1),
-                h('td',null, h('strong',null, b.brand)),
-                h('td',{className:'num'}, fmtFull(b.count)),
-                h('td',{className:'num'}, fmtFull(b.sum24)),
-                h('td',{className:'num'}, fmtFull(b.sum25)),
-                h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
-                h('td',{style:{width:110}}, h(Sparkline,{values:b.m25, w:100, h:26})),
-                h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, TR_MONTHS[b.peakI]) : '-'),
-                h('td',{style:{fontSize:11}},
-                  h('div',{style:{display:'flex',alignItems:'center',gap:5}},
-                    h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(b.topK1),flexShrink:0}}),
-                    h('span',null, b.topK1)
+              brandPageRows.length === 0 && h('tr',null, h('td',{colSpan:11, className:'empty'}, 'Sonuç bulunamadı')),
+              brandPageRows.flatMap((b,i) => {
+                const isOpen = expandedBrands.has(b.brand);
+                const mainRow = h('tr',{key:'b'+i, className:'clickable', onClick:()=>toggleExpand(b.brand)},
+                  h('td',{style:{width:26, color:'var(--ink-3)', fontSize:10, textAlign:'center'}}, isOpen ? '▾' : '▸'),
+                  h('td',{style:{width:40, color:'var(--ink-3)', fontSize:11}}, brandPage*brandsPerPage + i + 1),
+                  h('td',null, h('strong',null, b.brand)),
+                  h('td',{className:'num'}, fmtNum(b.count)),
+                  h('td',{className:'num'}, fmtNum(b.sum24)),
+                  h('td',{className:'num'}, fmtNum(b.sum25)),
+                  h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
+                  h('td',{style:{width:110}}, h(Sparkline,{values:b.m25, w:100, h:26})),
+                  h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, TR_MONTHS[b.peakI]) : '-'),
+                  h('td',{style:{fontSize:11}},
+                    h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+                      h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(b.topK1),flexShrink:0}}),
+                      h('span',null, b.topK1)
+                    )
+                  ),
+                  h('td',{className:'num', style:{fontSize:11}}, (b.topK1Share*100).toFixed(0)+'%')
+                );
+
+                if (!isOpen) return [mainRow];
+
+                // Expanded: sub-table showing Kat 2 breakdown + top keywords for each
+                const subRow = h('tr',{key:'s'+i},
+                  h('td',{colSpan:11, style:{padding:0, background:'var(--line-soft)'}},
+                    h('div',{style:{padding:'12px 16px 14px'}},
+                      h('div',{style:{fontSize:11, color:'var(--ink-3)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
+                        `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
+                      ),
+                      h('table',{className:'tbl', style:{background:'var(--bg-card)', marginBottom:0}},
+                        h('thead',null, h('tr',null,
+                          h('th',null,'Kat 2'),
+                          h('th',{className:'num'},'KW'),
+                          h('th',{className:'num'},'2024'),
+                          h('th',{className:'num'},'2025'),
+                          h('th',{className:'num'},'YoY'),
+                          h('th',null,'12 Ay'),
+                          h('th',null,'Top Keyword\'ler')
+                        )),
+                        h('tbody',null,
+                          b.k2Rows.map((r, ri) => h('tr',{key:ri},
+                            h('td',null, h('strong',null, r.k2)),
+                            h('td',{className:'num'}, fmtNum(r.count)),
+                            h('td',{className:'num'}, fmtNum(r.sum24)),
+                            h('td',{className:'num'}, fmtNum(r.sum25)),
+                            h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
+                            h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
+                            h('td',{style:{fontSize:11, color:'var(--ink-2)'}},
+                              r.topKws.map((k, ki) => h('span',{
+                                key:ki, className:'clickable',
+                                onClick:(e)=>{ e.stopPropagation(); setKeywordModal(k); },
+                                style:{
+                                  display:'inline-block', marginRight:6, marginBottom:2,
+                                  padding:'2px 7px', background:'var(--bg)',
+                                  border:'1px solid var(--line)', borderRadius:12,
+                                  fontSize:11, cursor:'pointer'
+                                }
+                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:10}}, fmtNum(k.a25))))
+                            )
+                          ))
+                        )
+                      )
+                    )
                   )
-                ),
-                h('td',{className:'num', style:{fontSize:11}}, (b.topK1Share*100).toFixed(0)+'%')
-              ))
+                );
+                return [mainRow, subRow];
+              })
             )
           )
         ),
         brandTotalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:brandPage===0, onClick:()=>setBrandPage(p=>Math.max(0,p-1))}, '← Önceki'),
-          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${brandPage+1}/${brandTotalPages} · ${fmtFull(brandRows.length)} marka`),
+          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${brandPage+1}/${brandTotalPages} · ${fmtNum(brandRows.length)} marka`),
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:brandPage>=brandTotalPages-1, onClick:()=>setBrandPage(p=>Math.min(brandTotalPages-1, p+1))}, 'Sonraki →')
         )
       ),
 
-      // Keyword table (kullandığı scope zaten yukarıdaki Kat1+Marka filtresi)
+      // Keyword table (filtrelerle sınırlı)
       h('div',{className:'toolbar'},
         h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:180}}),
         h('div',{className:'segmented'},
@@ -2079,7 +2162,7 @@ window.TABS = (function(){
           h('button',{className:trendFilter==='falling'?'active':'', onClick:()=>setTrendFilter('falling')}, '↓ Düşen')
         ),
         h('div',{style:{flex:1}}),
-        h('span',{className:'txt-3', style:{fontSize:12}}, fmtFull(filtered.length)+' keyword'),
+        h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
             {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
@@ -2118,8 +2201,8 @@ window.TABS = (function(){
                     )
                   ),
                   h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
-                  h('td',{className:'num'}, fmtFull(r.a24)),
-                  h('td',{className:'num'}, fmtFull(r.a25)),
+                  h('td',{className:'num'}, fmtNum(r.a24)),
+                  h('td',{className:'num'}, fmtNum(r.a25)),
                   h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
                   h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
                   h('td',null, pi>=0 ? h('span',{className:'pill neu'}, TR_MONTHS[pi]) : '-')
@@ -2130,7 +2213,7 @@ window.TABS = (function(){
         ),
         totalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Önceki'),
-          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages} · ${fmtFull(filtered.length)} KW`),
+          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages} · ${fmtNum(filtered.length)} KW`),
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1, p+1))}, 'Sonraki →')
         )
       )
@@ -2138,60 +2221,131 @@ window.TABS = (function(){
   }
 
   // === Brand Tab ===
-  function BrandTab({setKeywordModal}) {
-    const BR = D.brands || [];
+  function BrandTab({setKeywordModal, globalFilter}) {
+    const gK1 = globalFilter?.globalK1 || [];
+    const gK2 = globalFilter?.globalK2 || [];
+    const gK3 = globalFilter?.globalK3 || [];
+    const gBrand = globalFilter?.globalBrand || [];
+
     const [q, setQ] = React.useState('');
     const [catFilter, setCatFilter] = React.useState('');  // '' | 'Var' | 'Yok'
-    const [sort, setSort] = React.useState({k:'a25', d:-1});
+    const [sort, setSort] = React.useState({k:'sum25', d:-1});
+    const [expandedBrands, setExpandedBrands] = React.useState(() => new Set());
     const [page, setPage] = React.useState(0);
     const perPage = 50;
-    const [selectedBrand, setSelectedBrand] = React.useState(null);
+
+    const toggleExpand = (b) => {
+      setExpandedBrands(prev => {
+        const next = new Set(prev);
+        if (next.has(b)) next.delete(b); else next.add(b);
+        return next;
+      });
+    };
+
+    // Global filter sets
+    const k1Set = gK1.length ? new Set(gK1) : null;
+    const k2Set = gK2.length ? new Set(gK2) : null;
+    const k3Set = gK3.length ? new Set(gK3) : null;
+    const brandSet = gBrand.length ? new Set(gBrand) : null;
+
+    // Pool = all keywords (in + out), respecting global filter
+    const scopedKws = React.useMemo(() => {
+      const pool = (D.keywords || []).concat(D.outKeywords || []);
+      let rows = pool.filter(k => !!k.brand); // brand tab needs a brand
+      if (k1Set) rows = rows.filter(r => k1Set.has(r.k1));
+      if (k2Set) rows = rows.filter(r => k2Set.has(r.k2));
+      if (k3Set) rows = rows.filter(r => k3Set.has(r.k3));
+      if (brandSet) rows = rows.filter(r => brandSet.has(r.brand));
+      return rows;
+    }, [gK1, gK2, gK3, gBrand]);
+
+    // Build brands from scoped keywords (filter-aware)
+    const allBrands = React.useMemo(() => {
+      const m = {};
+      for (const k of scopedKws) {
+        const key = k.brand;
+        if (!m[key]) m[key] = {
+          brand: key, catalog: k.catalog || '', count: 0,
+          sum24: 0, sum25: 0,
+          m24: new Array(12).fill(0), m25: new Array(12).fill(0),
+          k1vol: {}, k2vol: {}
+        };
+        const b = m[key];
+        b.count += 1;
+        b.sum24 += (k.a24 || 0) * 12;
+        b.sum25 += (k.a25 || 0) * 12;
+        for (let i = 0; i < 12; i++) {
+          b.m24[i] += k.m24[i] || 0;
+          b.m25[i] += k.m25[i] || 0;
+        }
+        b.k1vol[k.k1] = (b.k1vol[k.k1] || 0) + (k.a25 || 0) * 12;
+        const k2key = k.k2 || '(boş)';
+        if (!b.k2vol[k2key]) b.k2vol[k2key] = { k2: k2key, count: 0, sum24: 0, sum25: 0, m25: new Array(12).fill(0), kws: [] };
+        b.k2vol[k2key].count += 1;
+        b.k2vol[k2key].sum24 += (k.a24 || 0) * 12;
+        b.k2vol[k2key].sum25 += (k.a25 || 0) * 12;
+        for (let i = 0; i < 12; i++) b.k2vol[k2key].m25[i] += k.m25[i] || 0;
+        b.k2vol[k2key].kws.push(k);
+        // Set catalog flag: prefer definite Var/Yok over empty
+        if (!b.catalog && k.catalog) b.catalog = k.catalog;
+        if (b.catalog !== 'Yok' && k.catalog === 'Yok') b.catalog = 'Yok';
+        else if (!b.catalog && k.catalog === 'Var') b.catalog = 'Var';
+      }
+      return Object.values(m).map(b => {
+        const yoy = b.sum24 ? (b.sum25 - b.sum24) / b.sum24 : 0;
+        const peakI = b.m25.indexOf(Math.max(...b.m25));
+        const topK1Entries = Object.entries(b.k1vol).sort((a,b) => b[1] - a[1]);
+        const topK1 = topK1Entries[0]?.[0] || '';
+        const topK1Share = b.sum25 && topK1Entries[0] ? topK1Entries[0][1] / b.sum25 : 0;
+        const k2Rows = Object.values(b.k2vol).map(v => ({
+          ...v,
+          yoy: v.sum24 ? (v.sum25 - v.sum24) / v.sum24 : 0,
+          topKws: [...v.kws].sort((a,b) => (b.a25||0) - (a.a25||0)).slice(0, 3)
+        })).sort((a,b) => b.sum25 - a.sum25);
+        return { ...b, yoy, peakI, topK1, topK1Share, k2Rows };
+      });
+    }, [scopedKws]);
 
     const filtered = React.useMemo(() => {
-      let rows = BR;
+      let rows = allBrands;
       const qq = q.trim().toLowerCase();
       if (qq) rows = rows.filter(r => r.brand.toLowerCase().includes(qq));
       if (catFilter) rows = rows.filter(r => r.catalog === catFilter);
       const s = sort.k, d = sort.d;
       rows = [...rows].sort((a,b) => {
         const av = a[s], bv = b[s];
+        if (typeof av === 'string') return (av || '').localeCompare(bv || '', 'tr') * d;
         if (av == null) return 1; if (bv == null) return -1;
         return (av > bv ? 1 : av < bv ? -1 : 0) * d;
       });
       return rows;
-    }, [q, catFilter, sort]);
+    }, [allBrands, q, catFilter, sort]);
 
-    React.useEffect(() => setPage(0), [q, catFilter]);
+    React.useEffect(() => setPage(0), [q, catFilter, scopedKws]);
     const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
     const totalPages = Math.ceil(filtered.length/perPage);
 
-    // KPIs
-    const varCount = BR.filter(b => b.catalog === 'Var').length;
-    const yokCount = BR.filter(b => b.catalog === 'Yok').length;
-    const totalVol25 = BR.reduce((s,b) => s + (b.a25 || 0) * 12, 0);
-    const topBrand = BR.length ? [...BR].sort((a,b)=>(b.a25||0)-(a.a25||0))[0] : null;
-    const avgYoY = BR.length ? BR.reduce((s,b)=>s+(b.yoy||0),0) / BR.length : 0;
+    // KPIs (filter-aware)
+    const varCount = allBrands.filter(b => b.catalog === 'Var').length;
+    const yokCount = allBrands.filter(b => b.catalog === 'Yok').length;
+    const totalVol25 = allBrands.reduce((s,b) => s + b.sum25, 0);
+    const topBrand = allBrands.length ? [...allBrands].sort((a,b)=>b.sum25-a.sum25)[0] : null;
+    const avgYoY = allBrands.length ? allBrands.reduce((s,b)=>s+(b.yoy||0),0) / allBrands.length : 0;
 
     // Top 10 for bar chart
     const top10 = React.useMemo(() => {
-      const src = catFilter ? BR.filter(b => b.catalog === catFilter) : BR;
-      return [...src].sort((a,b)=>(b.a25||0)-(a.a25||0)).slice(0, 10);
-    }, [catFilter]);
-    const top10Max = top10.length ? Math.max(...top10.map(b => b.a25 || 0)) : 1;
-
-    // Keywords for selected brand
-    const selectedKws = React.useMemo(() => {
-      if (!selectedBrand) return [];
-      const pool = (D.keywords || []).concat(D.outKeywords || []);
-      return pool.filter(k => (k.brand || '').toLowerCase() === selectedBrand.toLowerCase())
-        .sort((a,b) => (b.a25||0) - (a.a25||0));
-    }, [selectedBrand]);
+      const src = catFilter ? allBrands.filter(b => b.catalog === catFilter) : allBrands;
+      return [...src].sort((a,b)=>b.sum25-a.sum25).slice(0, 10);
+    }, [allBrands, catFilter]);
+    const top10Max = top10.length ? Math.max(...top10.map(b => b.sum25)) : 1;
 
     const th = (label, k, numCol=false) => h('th', {
       className:numCol?'num':'',
       style:{cursor:'pointer', userSelect:'none'},
       onClick:()=>setSort({k, d: sort.k===k ? -sort.d : -1})
     }, label, sort.k===k ? (sort.d>0?' ↑':' ↓') : '');
+
+    const hasFilterActive = gK1.length || gK2.length || gK3.length || gBrand.length;
 
     return h('div',null,
       h(SectionHeader, {
@@ -2201,15 +2355,17 @@ window.TABS = (function(){
           h('line',{x1:7,y1:7,x2:7.01,y2:7})
         ),
         title:'Brand Intelligence',
-        desc:`${fmtFull(BR.length)} marka · ${fmtFull(varCount)} Özdilek portföyünde · ${fmtFull(yokCount)} portföy dışı. Hacim ve büyüme bazında marka karşılaştırması.`
+        desc: hasFilterActive
+          ? `Filtre aktif · ${fmtNum(allBrands.length)} marka · ${fmtNum(totalVol25)} 2025 hacim · ${fmtNum(scopedKws.length)} keyword`
+          : `${fmtNum(allBrands.length)} marka · ${fmtNum(varCount)} Özdilek portföyünde · ${fmtNum(yokCount)} portföy dışı. Hacim ve büyüme bazında marka karşılaştırması.`
       }),
 
       h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
-        h(Kpi,{label:'Toplam Marka', value:fmtFull(BR.length), sub:`${varCount} Var · ${yokCount} Yok`, accent:true}),
+        h(Kpi,{label:'Toplam Marka', value:fmtNum(allBrands.length), sub:`${varCount} Var · ${yokCount} Yok`, accent:true}),
         h(Kpi,{label:'Toplam 2025 Hacim', value:fmtNum(totalVol25), chip:fmtPct(avgYoY), chipClass:trendClass(avgYoY), sub:'markaların toplamı'}),
-        h(Kpi,{label:'Özdilek Portföyü', value:fmtFull(varCount), sub:BR.length ? (varCount/BR.length*100).toFixed(0)+'% kapsama' : '—'}),
-        h(Kpi,{label:'Portföy Dışı', value:fmtFull(yokCount), sub:BR.length ? (yokCount/BR.length*100).toFixed(0)+'% fırsat' : '—'}),
-        topBrand && h(Kpi,{label:'En Büyük Marka', value:topBrand.brand, sub:fmtNum((topBrand.a25||0)*12)+' / 2025'}),
+        h(Kpi,{label:'Özdilek Portföyü', value:fmtNum(varCount), sub:allBrands.length ? (varCount/allBrands.length*100).toFixed(0)+'% kapsama' : '—'}),
+        h(Kpi,{label:'Portföy Dışı', value:fmtNum(yokCount), sub:allBrands.length ? (yokCount/allBrands.length*100).toFixed(0)+'% fırsat' : '—'}),
+        topBrand && h(Kpi,{label:'En Büyük Marka', value:topBrand.brand, sub:fmtNum(topBrand.sum25)+' / 2025'}),
       ),
 
       // Filter bar
@@ -2221,12 +2377,14 @@ window.TABS = (function(){
           h('button',{className:catFilter==='Yok'?'active':'', onClick:()=>setCatFilter('Yok')}, 'Özdilekte Yok')
         ),
         h('div',{style:{flex:1}}),
-        h('span',{className:'txt-3', style:{fontSize:12}}, fmtFull(filtered.length)+' marka'),
+        h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' marka'),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
             {label:'Marka',key:'brand'}, {label:'Katalog',key:'catalog'},
-            {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'},
-            {label:'Peak Serial',key:'peakSerial'},
+            {label:'KW Sayısı',key:'count'},
+            {label:'2024 Hacim',key:'sum24'}, {label:'2025 Hacim',key:'sum25'}, {label:'YoY',key:'yoy'},
+            {label:'Peak Ay', get:r => r.peakI >= 0 ? TR_MONTHS[r.peakI] : ''},
+            {label:'Ana Kategori',key:'topK1'},
             ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25 ? r.m25[i] : ''}))
           ]);
           downloadCSV(`${BRAND_SLUG}-brands.csv`, csv);
@@ -2236,19 +2394,18 @@ window.TABS = (function(){
       // Top 10 bar chart
       top10.length > 0 && h('div',{className:'card', style:{marginBottom:18}},
         h('div',{className:'card-header'}, h('h3',null,
-          'Top 10 Marka · 2025 Hacim ',
+          'Top 10 Marka · 2025 Hacim',
           catFilter && h('span',{className:'txt-3', style:{fontSize:12,marginLeft:8}}, '(' + (catFilter === 'Var' ? 'Özdilekte Var' : 'Özdilekte Yok') + ')')
         )),
         h('div',{style:{display:'flex',flexDirection:'column',gap:8,padding:14}},
           top10.map((b,i) => {
-            const vol = (b.a25 || 0) * 12;
-            const pct = top10Max ? ((b.a25 || 0) / top10Max * 100) : 0;
+            const pct = top10Max ? (b.sum25 / top10Max * 100) : 0;
             const color = b.catalog === 'Var' ? '#59A14F' : b.catalog === 'Yok' ? '#E15759' : '#B07AA1';
-            return h('div',{key:i, className:'clickable', onClick:()=>setSelectedBrand(b.brand), style:{cursor:'pointer'}},
+            return h('div',{key:i, className:'clickable', onClick:()=>toggleExpand(b.brand), style:{cursor:'pointer'}},
               h('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:3,fontSize:12}},
                 h('strong',{style:{flex:1}}, (i+1)+'. '+b.brand),
                 h('span',{className:'pill '+(b.catalog==='Var'?'pos':b.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, b.catalog || '-'),
-                h('span',{className:'num', style:{fontWeight:600}}, fmtNum(vol)),
+                h('span',{className:'num', style:{fontWeight:600}}, fmtNum(b.sum25)),
                 h(YoYPill,{yoy:b.yoy})
               ),
               h('div',{style:{height:10,background:'var(--line)',borderRadius:4,overflow:'hidden'}},
@@ -2259,82 +2416,98 @@ window.TABS = (function(){
         )
       ),
 
-      // Brand table
+      // Brand table with expand-on-click pivot
       h('div',{className:'card flush', style:{marginBottom:18}},
         h('div',{className:'tbl-wrap'},
           h('table',{className:'tbl'},
             h('thead',null, h('tr',null,
+              h('th',{style:{width:26}}, ''),
               th('Marka','brand'),
               h('th',null,'Katalog'),
-              th('2024','a24',true),
-              th('2025','a25',true),
+              th('KW','count',true),
+              th('2024','sum24',true),
+              th('2025','sum25',true),
               th('YoY','yoy',true),
               h('th',null,'12 Ay'),
-              h('th',null,'Peak')
+              th('Peak','peakI'),
+              th('Ana Kat','topK1')
             )),
             h('tbody',null,
-              pageRows.length === 0 && h('tr',null, h('td',{colSpan:7, className:'empty'}, 'Sonuç bulunamadı')),
-              pageRows.map((b,i) => {
-                const pi = b.m25 ? b.m25.indexOf(Math.max(...b.m25)) : -1;
-                return h('tr',{key:page*perPage+i, className:'clickable', onClick:()=>setSelectedBrand(b.brand)},
+              pageRows.length === 0 && h('tr',null, h('td',{colSpan:10, className:'empty'}, 'Sonuç bulunamadı')),
+              pageRows.flatMap((b,i) => {
+                const isOpen = expandedBrands.has(b.brand);
+                const mainRow = h('tr',{key:'b'+i, className:'clickable', onClick:()=>toggleExpand(b.brand)},
+                  h('td',{style:{width:26, color:'var(--ink-3)', fontSize:10, textAlign:'center'}}, isOpen ? '▾' : '▸'),
                   h('td',null, h('strong',null, b.brand)),
                   h('td',null, h('span',{className:'pill '+(b.catalog==='Var'?'pos':b.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, b.catalog || '-')),
-                  h('td',{className:'num'}, fmtFull(b.a24)),
-                  h('td',{className:'num'}, fmtFull(b.a25)),
+                  h('td',{className:'num'}, fmtNum(b.count)),
+                  h('td',{className:'num'}, fmtNum(b.sum24)),
+                  h('td',{className:'num'}, fmtNum(b.sum25)),
                   h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
-                  h('td',{style:{width:110}}, b.m25 ? h(Sparkline,{values:b.m25, w:100, h:26}) : ''),
-                  h('td',null, pi>=0 ? h('span',{className:'pill neu'}, TR_MONTHS[pi]) : '-')
+                  h('td',{style:{width:110}}, h(Sparkline,{values:b.m25, w:100, h:26})),
+                  h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, TR_MONTHS[b.peakI]) : '-'),
+                  h('td',{style:{fontSize:11}},
+                    h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+                      h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(b.topK1),flexShrink:0}}),
+                      h('span',null, b.topK1)
+                    )
+                  )
                 );
+
+                if (!isOpen) return [mainRow];
+
+                const subRow = h('tr',{key:'s'+i},
+                  h('td',{colSpan:10, style:{padding:0, background:'var(--line-soft)'}},
+                    h('div',{style:{padding:'12px 16px 14px'}},
+                      h('div',{style:{fontSize:11, color:'var(--ink-3)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
+                        `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
+                      ),
+                      h('table',{className:'tbl', style:{background:'var(--bg-card)', marginBottom:0}},
+                        h('thead',null, h('tr',null,
+                          h('th',null,'Kat 2'),
+                          h('th',{className:'num'},'KW'),
+                          h('th',{className:'num'},'2024'),
+                          h('th',{className:'num'},'2025'),
+                          h('th',{className:'num'},'YoY'),
+                          h('th',null,'12 Ay'),
+                          h('th',null,'Top Keyword\'ler')
+                        )),
+                        h('tbody',null,
+                          b.k2Rows.map((r, ri) => h('tr',{key:ri},
+                            h('td',null, h('strong',null, r.k2)),
+                            h('td',{className:'num'}, fmtNum(r.count)),
+                            h('td',{className:'num'}, fmtNum(r.sum24)),
+                            h('td',{className:'num'}, fmtNum(r.sum25)),
+                            h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
+                            h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
+                            h('td',{style:{fontSize:11, color:'var(--ink-2)'}},
+                              r.topKws.map((k, ki) => h('span',{
+                                key:ki, className:'clickable',
+                                onClick:(e)=>{ e.stopPropagation(); setKeywordModal(k); },
+                                style:{
+                                  display:'inline-block', marginRight:6, marginBottom:2,
+                                  padding:'2px 7px', background:'var(--bg)',
+                                  border:'1px solid var(--line)', borderRadius:12,
+                                  fontSize:11, cursor:'pointer'
+                                }
+                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:10}}, fmtNum(k.a25))))
+                            )
+                          ))
+                        )
+                      )
+                    )
+                  )
+                );
+                return [mainRow, subRow];
               })
             )
           )
         ),
         totalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Önceki'),
-          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages}`),
+          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages} · ${fmtNum(filtered.length)} marka`),
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1, p+1))}, 'Sonraki →')
         )
-      ),
-
-      // Selected brand drill-down
-      selectedBrand && h('div',{className:'card', style:{marginBottom:18}},
-        h('div',{className:'card-header', style:{alignItems:'center'}},
-          h('h3',{style:{flex:1}}, 'Marka Detayı · ', h('strong',{style:{color:'var(--coral)'}}, selectedBrand),
-            h('span',{className:'txt-3', style:{fontSize:12, marginLeft:10}}, fmtFull(selectedKws.length)+' keyword')
-          ),
-          h('button',{className:'chip-btn', style:{padding:'4px 10px',borderRadius:999}, onClick:()=>setSelectedBrand(null)}, '× Kapat')
-        ),
-        selectedKws.length === 0
-          ? h('div',{className:'empty', style:{padding:20}}, 'Bu markaya ait keyword bulunamadı')
-          : h('div',{className:'tbl-wrap'},
-              h('table',{className:'tbl'},
-                h('thead',null, h('tr',null,
-                  h('th',null,'Keyword'),
-                  h('th',null,'Kat 1'),
-                  h('th',null,'Katalog'),
-                  h('th',{className:'num'},'2024'),
-                  h('th',{className:'num'},'2025'),
-                  h('th',{className:'num'},'YoY'),
-                  h('th',null,'12 Ay')
-                )),
-                h('tbody',null,
-                  selectedKws.slice(0, 100).map((r,i) => h('tr',{key:i, className:'clickable', onClick:()=>setKeywordModal(r)},
-                    h('td',{className:'kw-cell'}, r.kw),
-                    h('td',{style:{fontSize:11}},
-                      h('div',{style:{display:'flex',alignItems:'center',gap:5}},
-                        h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(r.k1),flexShrink:0}}),
-                        h('span',null, r.k1)
-                      )
-                    ),
-                    h('td',null, h('span',{className:'pill '+(r.catalog==='Var'?'pos':r.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, r.catalog || '-')),
-                    h('td',{className:'num'}, fmtFull(r.a24)),
-                    h('td',{className:'num'}, fmtFull(r.a25)),
-                    h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
-                    h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26}))
-                  ))
-                )
-              )
-            )
       )
     );
   }

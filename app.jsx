@@ -48,11 +48,12 @@
     const [keywordInitFilter, setKeywordInitFilter] = React.useState(null);
     const [keywordModal, setKeywordModal] = React.useState(null);
 
-    // Global 3-level category filter (lifted from OzetTab - lives above tabs)
+    // Global 3-level category filter + Brand filter (lifted from OzetTab - lives above tabs)
     const [globalK1, setGlobalK1] = React.useState(() => (initialHash && initialHash.k1) || []);
     const [globalK2, setGlobalK2] = React.useState(() => (initialHash && initialHash.k2) || []);
     const [globalK3, setGlobalK3] = React.useState(() => (initialHash && initialHash.k3) || []);
-    const hasGlobalFilter = globalK1.length > 0 || globalK2.length > 0 || globalK3.length > 0;
+    const [globalBrand, setGlobalBrand] = React.useState(() => (initialHash && initialHash.brand) || []);
+    const hasGlobalFilter = globalK1.length > 0 || globalK2.length > 0 || globalK3.length > 0 || globalBrand.length > 0;
     const allKat1 = React.useMemo(() => D.kat1Summary.map(k => k.k1), []);
     const g_k1Set = globalK1.length ? new Set(globalK1) : null;
     const g_k2Set = globalK2.length ? new Set(globalK2) : null;
@@ -62,6 +63,12 @@
     const allKat3Filtered = React.useMemo(() =>
       [...new Set(D.keywords.filter(k => (!g_k1Set || g_k1Set.has(k.k1)) && (!g_k2Set || g_k2Set.has(k.k2))).map(k => k.k3))].sort()
     , [globalK1, globalK2]);
+    // Brand options = union of in-catalog + out-of-catalog brands, filtered by Kat 1 selection
+    const allBrandsGlobal = React.useMemo(() => {
+      const pool = (D.keywords || []).concat(D.outKeywords || []);
+      const filtered = g_k1Set ? pool.filter(k => g_k1Set.has(k.k1)) : pool;
+      return [...new Set(filtered.map(k => k.brand).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'tr'));
+    }, [globalK1]);
 
     // Sticky shadow state
     // Filter bar scroll davranışı:
@@ -119,8 +126,8 @@
 
     // URL hash sync - tab ve global filtre her değişimde URL'ye yazılır (paylaşılabilir link)
     React.useEffect(() => {
-      writeHashState({ tab, k1: globalK1, k2: globalK2, k3: globalK3 });
-    }, [tab, globalK1, globalK2, globalK3]);
+      writeHashState({ tab, k1: globalK1, k2: globalK2, k3: globalK3, brand: globalBrand });
+    }, [tab, globalK1, globalK2, globalK3, globalBrand]);
 
     // Link kopyala - URL'yi clipboard'a kopyalar + "Kopyalandı" toast
     const [linkCopied, setLinkCopied] = React.useState(false);
@@ -173,7 +180,9 @@
     const activeTab = tab;
 
     const globalFilter = {
-      globalK1, globalK2, globalK3, setGlobalK1, setGlobalK2, setGlobalK3, hasGlobalFilter
+      globalK1, globalK2, globalK3, globalBrand,
+      setGlobalK1, setGlobalK2, setGlobalK3, setGlobalBrand,
+      hasGlobalFilter
     };
 
     function renderTab(id) {
@@ -183,8 +192,8 @@
         case 'keyword': return h(KeywordTab, {setKeywordModal, initialFilter: keywordInitFilter, clearInitialFilter: () => setKeywordInitFilter(null), globalFilter});
         case 'trendler': return h(TrendlerTab, {setKeywordModal, onNavigateKw, globalFilter});
         case 'fiyat': return h(FiyatTab, {setKeywordModal, globalFilter});
-        case 'out': return h(OutOfCatalogTab, {setKeywordModal});
-        case 'brand': return h(BrandTab, {setKeywordModal});
+        case 'out': return h(OutOfCatalogTab, {setKeywordModal, globalFilter});
+        case 'brand': return h(BrandTab, {setKeywordModal, globalFilter});
       }
     }
 
@@ -255,10 +264,10 @@
                 h('circle',{cx:12, cy:12, r:1.5, fill:'currentColor'})
               )
             ),
-            h('strong',null,'Kategori Filtresi'),
+            h('strong',null,'Kategori & Marka Filtresi'),
             hasGlobalFilter
               ? h('span',{className:'txt-3', style:{fontSize:11, marginLeft:8}},
-                  'Filtre aktif · Özet tüm metrikleri filtreye göre güncellenir · diğer sekmelerde pasif')
+                  'Filtre aktif · Özet + Özdilekte Olmayan Markalar + Brand sekmelerini etkiler')
               : null
           ),
           h(window.C.MultiSelect, {
@@ -294,16 +303,24 @@
             onChange: setGlobalK3,
             width: 220
           }),
+          h(window.C.MultiSelect, {
+            label: 'Marka',
+            options: allBrandsGlobal,
+            selected: globalBrand,
+            onChange: setGlobalBrand,
+            width: 220
+          }),
           hasGlobalFilter && h('button',{
             className:'chip-btn',
-            onClick:()=>{ setGlobalK1([]); setGlobalK2([]); setGlobalK3([]); }
+            onClick:()=>{ setGlobalK1([]); setGlobalK2([]); setGlobalK3([]); setGlobalBrand([]); }
           }, '× Temizle')
         ),
         hasGlobalFilter && h('div',{className:'filter-chips', style:{marginBottom:10}},
           h('span',{className:'lbl'}, 'Seçili:'),
           globalK1.map(k => h('button',{key:'1'+k, className:'filter-chip', onClick:()=>setGlobalK1(globalK1.filter(x=>x!==k))}, 'K1: '+k, h('span',{className:'x'},'×'))),
           globalK2.map(k => h('button',{key:'2'+k, className:'filter-chip', onClick:()=>setGlobalK2(globalK2.filter(x=>x!==k))}, 'K2: '+k, h('span',{className:'x'},'×'))),
-          globalK3.map(k => h('button',{key:'3'+k, className:'filter-chip', onClick:()=>setGlobalK3(globalK3.filter(x=>x!==k))}, 'K3: '+k, h('span',{className:'x'},'×')))
+          globalK3.map(k => h('button',{key:'3'+k, className:'filter-chip', onClick:()=>setGlobalK3(globalK3.filter(x=>x!==k))}, 'K3: '+k, h('span',{className:'x'},'×'))),
+          globalBrand.map(b => h('button',{key:'b'+b, className:'filter-chip', onClick:()=>setGlobalBrand(globalBrand.filter(x=>x!==b))}, 'Marka: '+b, h('span',{className:'x'},'×')))
         )
       ),
 
