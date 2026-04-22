@@ -53,7 +53,15 @@
     const [globalK2, setGlobalK2] = React.useState(() => (initialHash && initialHash.k2) || []);
     const [globalK3, setGlobalK3] = React.useState(() => (initialHash && initialHash.k3) || []);
     const [globalBrand, setGlobalBrand] = React.useState(() => (initialHash && initialHash.brand) || []);
-    const hasGlobalFilter = globalK1.length > 0 || globalK2.length > 0 || globalK3.length > 0 || globalBrand.length > 0;
+    // Secondary analytical filters (used by Trendler + Keyword + OutOfCatalog + Fiyat tabs)
+    const [globalPeakMonth, setGlobalPeakMonth] = React.useState([]);
+    const [globalPeakQuarter, setGlobalPeakQuarter] = React.useState([]);
+    const [globalSezType, setGlobalSezType] = React.useState([]);
+    const [globalBucket, setGlobalBucket] = React.useState([]);
+    const [globalTrend, setGlobalTrend] = React.useState('');  // 'rising'|'falling'|'stable'|''
+    const hasGlobalFilter = globalK1.length > 0 || globalK2.length > 0 || globalK3.length > 0 || globalBrand.length > 0
+      || globalPeakMonth.length > 0 || globalPeakQuarter.length > 0 || globalSezType.length > 0
+      || globalBucket.length > 0 || !!globalTrend;
     const allKat1 = React.useMemo(() => D.kat1Summary.map(k => k.k1), []);
     const g_k1Set = globalK1.length ? new Set(globalK1) : null;
     const g_k2Set = globalK2.length ? new Set(globalK2) : null;
@@ -69,6 +77,19 @@
       const filtered = g_k1Set ? pool.filter(k => g_k1Set.has(k.k1)) : pool;
       return [...new Set(filtered.map(k => k.brand).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'tr'));
     }, [globalK1]);
+    // Secondary filter options
+    const TR_MONTHS_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+    const monthOptions = React.useMemo(() => TR_MONTHS_SHORT, []);
+    const quarterOptions = ['Q1 (Oca-Mar)','Q2 (Nis-Haz)','Q3 (Tem-Eyl)','Q4 (Eki-Ara)'];
+    const sezTypeOptions = ['Evergreen','Orta Mevsimsellik','Yüksek Mevsimsellik'];
+    const bucketOptions = React.useMemo(() =>
+      [...new Set(D.keywords.map(k => k.bucket).filter(Boolean))].sort((a,b) => {
+        // Sort by numeric range (0-1000 first etc)
+        const numA = parseInt(String(a).replace(/[^\d]/g,'') || '0');
+        const numB = parseInt(String(b).replace(/[^\d]/g,'') || '0');
+        return numA - numB;
+      })
+    , []);
 
     // Sticky shadow state
     // Filter bar scroll davranışı:
@@ -181,7 +202,9 @@
 
     const globalFilter = {
       globalK1, globalK2, globalK3, globalBrand,
+      globalPeakMonth, globalPeakQuarter, globalSezType, globalBucket, globalTrend,
       setGlobalK1, setGlobalK2, setGlobalK3, setGlobalBrand,
+      setGlobalPeakMonth, setGlobalPeakQuarter, setGlobalSezType, setGlobalBucket, setGlobalTrend,
       hasGlobalFilter
     };
 
@@ -192,8 +215,8 @@
         case 'keyword': return h(KeywordTab, {setKeywordModal, initialFilter: keywordInitFilter, clearInitialFilter: () => setKeywordInitFilter(null), globalFilter});
         case 'trendler': return h(TrendlerTab, {setKeywordModal, onNavigateKw, globalFilter});
         case 'fiyat': return h(FiyatTab, {setKeywordModal, globalFilter});
-        case 'out': return h(OutOfCatalogTab, {setKeywordModal, globalFilter});
-        case 'brand': return h(BrandTab, {setKeywordModal, globalFilter});
+        case 'out': return h(OutOfCatalogTab, {setKeywordModal, onNavigateKw, globalFilter});
+        case 'brand': return h(BrandTab, {setKeywordModal, onNavigateKw, globalFilter});
       }
     }
 
@@ -308,20 +331,53 @@
           }),
           hasGlobalFilter && h('button',{
             className:'chip-btn',
-            onClick:()=>{ setGlobalK1([]); setGlobalK2([]); setGlobalK3([]); setGlobalBrand([]); }
+            onClick:()=>{
+              setGlobalK1([]); setGlobalK2([]); setGlobalK3([]); setGlobalBrand([]);
+              setGlobalPeakMonth([]); setGlobalPeakQuarter([]); setGlobalSezType([]);
+              setGlobalBucket([]); setGlobalTrend('');
+            }
           }, '× Temizle')
         ),
-        hasGlobalFilter && h('div',{className:'filter-chips', style:{marginBottom:6}},
+        // Row 2: Secondary analytical filters
+        h('div',{className:'filter-panel filter-panel-secondary', style:{marginTop:-6}},
+          h('div',{className:'filter-panel-label', style:{minWidth:90}},
+            h('span',{className:'txt-3', style:{fontSize:10, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase'}}, 'Ek Filtre')
+          ),
+          h(window.C.MultiSelect, {
+            label: 'Peak Ay', options: monthOptions, selected: globalPeakMonth, onChange: setGlobalPeakMonth, width: 160, searchable: false
+          }),
+          h(window.C.MultiSelect, {
+            label: 'Peak Çeyrek', options: quarterOptions, selected: globalPeakQuarter, onChange: setGlobalPeakQuarter, width: 180, searchable: false
+          }),
+          h(window.C.MultiSelect, {
+            label: 'Mevsim Tipi', options: sezTypeOptions, selected: globalSezType, onChange: setGlobalSezType, width: 180, searchable: false
+          }),
+          h(window.C.MultiSelect, {
+            label: 'Hacim Aralığı', options: bucketOptions, selected: globalBucket, onChange: setGlobalBucket, width: 170, searchable: false
+          }),
+          h('div',{className:'segmented', title:'Trend Yönü', style:{fontSize:11}},
+            h('button',{className:globalTrend===''?'active':'', onClick:()=>setGlobalTrend('')}, 'Tüm Trend'),
+            h('button',{className:globalTrend==='rising'?'active':'', onClick:()=>setGlobalTrend('rising')}, '↑ Yükselen'),
+            h('button',{className:globalTrend==='stable'?'active':'', onClick:()=>setGlobalTrend('stable')}, '→ Stabil'),
+            h('button',{className:globalTrend==='falling'?'active':'', onClick:()=>setGlobalTrend('falling')}, '↓ Düşen')
+          )
+        ),
+        hasGlobalFilter && h('div',{className:'filter-chips', style:{marginBottom:6, marginTop:6}},
           h('span',{className:'lbl'}, 'Seçili:'),
           globalK1.map(k => h('button',{key:'1'+k, className:'filter-chip', onClick:()=>setGlobalK1(globalK1.filter(x=>x!==k))}, 'K1: '+k, h('span',{className:'x'},'×'))),
           globalK2.map(k => h('button',{key:'2'+k, className:'filter-chip', onClick:()=>setGlobalK2(globalK2.filter(x=>x!==k))}, 'K2: '+k, h('span',{className:'x'},'×'))),
           globalK3.map(k => h('button',{key:'3'+k, className:'filter-chip', onClick:()=>setGlobalK3(globalK3.filter(x=>x!==k))}, 'K3: '+k, h('span',{className:'x'},'×'))),
-          globalBrand.map(b => h('button',{key:'b'+b, className:'filter-chip', onClick:()=>setGlobalBrand(globalBrand.filter(x=>x!==b))}, 'Marka: '+b, h('span',{className:'x'},'×')))
+          globalBrand.map(b => h('button',{key:'b'+b, className:'filter-chip', onClick:()=>setGlobalBrand(globalBrand.filter(x=>x!==b))}, 'Marka: '+b, h('span',{className:'x'},'×'))),
+          globalPeakMonth.map(m => h('button',{key:'pm'+m, className:'filter-chip', onClick:()=>setGlobalPeakMonth(globalPeakMonth.filter(x=>x!==m))}, 'Peak: '+m, h('span',{className:'x'},'×'))),
+          globalPeakQuarter.map(q => h('button',{key:'pq'+q, className:'filter-chip', onClick:()=>setGlobalPeakQuarter(globalPeakQuarter.filter(x=>x!==q))}, 'Ç: '+q.split(' ')[0], h('span',{className:'x'},'×'))),
+          globalSezType.map(t => h('button',{key:'st'+t, className:'filter-chip', onClick:()=>setGlobalSezType(globalSezType.filter(x=>x!==t))}, t, h('span',{className:'x'},'×'))),
+          globalBucket.map(b => h('button',{key:'bk'+b, className:'filter-chip', onClick:()=>setGlobalBucket(globalBucket.filter(x=>x!==b))}, 'Hacim: '+b, h('span',{className:'x'},'×'))),
+          globalTrend && h('button',{className:'filter-chip', onClick:()=>setGlobalTrend('')}, globalTrend==='rising'?'↑ Yükselen':globalTrend==='falling'?'↓ Düşen':'→ Stabil', h('span',{className:'x'},'×'))
         ),
         hasGlobalFilter && h('div',{
           className:'txt-3',
           style:{fontSize:10.5, marginBottom:10, paddingLeft:2, letterSpacing:'.02em', opacity:.75}
-        }, 'Filtre aktif · Özet + Trendler + Özdilekte Olmayan Markalar + Brand sekmelerini etkiler')
+        }, 'Filtre aktif · Tüm sekmeleri dinamik olarak etkiler')
       ),
 
       // Content

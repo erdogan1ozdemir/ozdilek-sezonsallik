@@ -8,6 +8,66 @@ window.TABS = (function(){
   const h = React.createElement;
   const D = window.DATA;
 
+  // ===== Shared helper: apply global filter to a keyword list =====
+  // All tabs use this to respect the top Kategori & Marka Filtresi consistently.
+  // gf = globalFilter prop; optional sezTypeMap (kw+k1 → type) for Mevsim Tipi filter.
+  function applyGlobalFilter(keywords, gf, sezTypeMap) {
+    if (!gf) return keywords;
+    const k1S = (gf.globalK1 || []).length ? new Set(gf.globalK1) : null;
+    const k2S = (gf.globalK2 || []).length ? new Set(gf.globalK2) : null;
+    const k3S = (gf.globalK3 || []).length ? new Set(gf.globalK3) : null;
+    const brS = (gf.globalBrand || []).length ? new Set(gf.globalBrand) : null;
+    const mS = (gf.globalPeakMonth || []).length ? new Set(gf.globalPeakMonth) : null;
+    const qS = (gf.globalPeakQuarter || []).length ? new Set(gf.globalPeakQuarter) : null;
+    const stS = (gf.globalSezType || []).length ? new Set(gf.globalSezType) : null;
+    const bkS = (gf.globalBucket || []).length ? new Set(gf.globalBucket) : null;
+    const tr = gf.globalTrend || '';
+    if (!k1S && !k2S && !k3S && !brS && !mS && !qS && !stS && !bkS && !tr) return keywords;
+    const TR_MO_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+    return keywords.filter(k => {
+      if (k1S && !k1S.has(k.k1)) return false;
+      if (k2S && !k2S.has(k.k2)) return false;
+      if (k3S && !k3S.has(k.k3)) return false;
+      if (brS && !brS.has(k.brand)) return false;
+      if (bkS && !bkS.has(k.bucket)) return false;
+      if (tr === 'rising' && !(k.yoy > 0.05)) return false;
+      if (tr === 'falling' && !(k.yoy < -0.05)) return false;
+      if (tr === 'stable' && !(k.yoy >= -0.05 && k.yoy <= 0.05)) return false;
+      if (mS || qS) {
+        if (!k.m25) return false;
+        const pi = k.m25.indexOf(Math.max(...k.m25));
+        if (mS && !mS.has(TR_MO_SHORT[pi])) return false;
+        if (qS) {
+          const qIdx = Math.floor(pi / 3);
+          const qLabel = ['Q1 (Oca-Mar)','Q2 (Nis-Haz)','Q3 (Tem-Eyl)','Q4 (Eki-Ara)'][qIdx];
+          if (!qS.has(qLabel)) return false;
+        }
+      }
+      if (stS && sezTypeMap) {
+        const t = sezTypeMap.get(k.kw + '|' + k.k1);
+        if (!stS.has(t)) return false;
+      }
+      return true;
+    });
+  }
+  // Returns a trend arrow character + color based on last-3-month slope vs avg.
+  // Used to complement YoY (which is annual) with a recent momentum indicator.
+  function recentTrendArrow(m25) {
+    if (!m25 || m25.length < 3) return null;
+    const avg = m25.reduce((s,v)=>s+v,0) / m25.length;
+    if (avg <= 0) return null;
+    const last3 = m25.slice(-3);
+    const prev3 = m25.slice(-6, -3);
+    const sumLast = last3.reduce((s,v)=>s+v,0);
+    const sumPrev = prev3.reduce((s,v)=>s+v,0) || 1;
+    const mom = (sumLast - sumPrev) / sumPrev;
+    if (mom > 0.1) return { char: '↗', color: 'var(--green, #059669)', title: `Son 3 ay momentum: +${(mom*100).toFixed(0)}%` };
+    if (mom < -0.1) return { char: '↘', color: 'var(--red, #DC2626)', title: `Son 3 ay momentum: ${(mom*100).toFixed(0)}%` };
+    return { char: '→', color: 'var(--ink-3)', title: `Son 3 ay momentum: ${(mom*100).toFixed(0)}%` };
+  }
+
+  window.TABS_HELPERS = { applyGlobalFilter, recentTrendArrow };
+
   // ===== Icon helpers (emoji'ler yerine) - stroke SVG, currentColor ile renklenir =====
   const Svg = (size, children) => h('svg', {
     width: size, height: size, viewBox: '0 0 24 24',
@@ -117,22 +177,22 @@ window.TABS = (function(){
     // Global filter from props (lifted to app.jsx - panel now sits under the tabs)
     const {globalK1, globalK2, globalK3, globalBrand = [], setGlobalK1, setGlobalK2, setGlobalK3, hasGlobalFilter} = globalFilter;
 
+    // SezType map for applyGlobalFilter's Mevsim Tipi filter support
+    const sezTypeMapForFilter = React.useMemo(() => {
+      const m = new Map();
+      for (const r of D.sezType || []) m.set(r.kw + '|' + r.k1, r.type);
+      return m;
+    }, []);
+
+    // Apply global filter to keyword universe used by KPIs, donut, line, top10/gainers/losers
+    const fKeywords = React.useMemo(() =>
+      applyGlobalFilter(D.keywords, globalFilter, sezTypeMapForFilter)
+    , [globalFilter, sezTypeMapForFilter]);
+
+    // keep legacy set refs used elsewhere (below for f_PRICE scoping)
     const g_k1Set = globalK1.length ? new Set(globalK1) : null;
     const g_k2Set = globalK2.length ? new Set(globalK2) : null;
     const g_k3Set = globalK3.length ? new Set(globalK3) : null;
-    const g_brSet = globalBrand.length ? new Set(globalBrand) : null;
-
-    // Apply global filter to keyword universe used by KPIs, donut, line, top10/gainers/losers
-    const fKeywords = React.useMemo(() => {
-      if (!hasGlobalFilter) return D.keywords;
-      return D.keywords.filter(k => {
-        if (g_k1Set && !g_k1Set.has(k.k1)) return false;
-        if (g_k2Set && !g_k2Set.has(k.k2)) return false;
-        if (g_k3Set && !g_k3Set.has(k.k3)) return false;
-        if (g_brSet && !g_brSet.has(k.brand)) return false;
-        return true;
-      });
-    }, [globalK1, globalK2, globalK3, globalBrand]);
 
     const f_TOTAL_KW = fKeywords.length;
     const f_TOTAL_2025 = fKeywords.reduce((a,k)=>a+(k.a25||0),0) * 12;
@@ -635,6 +695,96 @@ window.TABS = (function(){
         )
       ),
 
+      // ==== NEW: Marka × Kategori Matrix (in-catalog brands) ====
+      (() => {
+        // Build brand × k1 matrix from fKeywords (global-filter aware)
+        const m = {};
+        for (const k of fKeywords) {
+          if (!k.brand) continue;
+          if (!m[k.brand]) m[k.brand] = { brand: k.brand, sum25: 0, k1vol: {} };
+          m[k.brand].sum25 += (k.a25 || 0) * 12;
+          m[k.brand].k1vol[k.k1] = (m[k.brand].k1vol[k.k1] || 0) + (k.a25 || 0) * 12;
+        }
+        const allBrands = Object.values(m);
+        const topBrands15 = [...allBrands].sort((a,b) => b.sum25 - a.sum25).slice(0, 15);
+        if (topBrands15.length === 0) return null;
+        const k1List = Array.from(new Set(topBrands15.flatMap(b => Object.keys(b.k1vol)))).sort();
+        if (k1List.length === 0) return null;
+        const matrix = topBrands15.map(b => ({
+          brand: b.brand, total: b.sum25,
+          cells: k1List.map(k1 => b.k1vol[k1] || 0)
+        }));
+        const rowMaxes = matrix.map(r => Math.max(...r.cells, 1));
+        return h('div',{className:'card', style:{marginBottom:18}},
+          h('div',{className:'card-header'},
+            h('h3',null,'Marka × Kategori Matris · Portföy İçi',
+              h(InfoIcon,null,
+                h('strong',null,'Ne gösterir? '),'Özdilek portföyünde olan en yüksek hacimli 15 markanın Kat 1 dağılımı. Koyu hücre markanın güçlü olduğu kategori.',
+                h('br'),h('br'),h('strong',null,'Ne için? '),'Hangi markanın hangi kategoride lider olduğunu bir bakışta gösterir. Üstten filtre (özellikle Marka) ile daraltılabilir.'
+              )
+            ),
+            h('span',{className:'txt-3', style:{fontSize:11}}, topBrands15.length + ' marka × ' + k1List.length + ' kat · satır-normalize')
+          ),
+          h('div',{className:'bkm-scroll', style:{overflow:'auto', padding:'0 14px 14px', position:'relative'}},
+            h('div',{className:'bkm-grid', style:{
+              display:'grid',
+              gridTemplateColumns: `minmax(140px, 180px) repeat(${k1List.length}, minmax(70px, 1fr)) minmax(70px, 90px)`,
+              gap:2, minWidth: (140 + k1List.length*70 + 70) + 'px'
+            }},
+              h('div',{style:{padding:'8px 6px', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', left:0, background:'var(--bg-card)', zIndex:2}}, 'Marka'),
+              ...k1List.map(k1 => h('div',{
+                key:'h'+k1,
+                style:{
+                  padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'center',
+                  borderBottom:`2px solid ${katColor(k1)}`, color:'var(--ink-2)',
+                  lineHeight:1.15, wordBreak:'break-word'
+                }, title:k1
+              }, k1)),
+              h('div',{style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em'}}, 'Toplam'),
+              ...matrix.flatMap((r, ri) => [
+                h('div',{
+                  key:'b'+ri,
+                  style:{
+                    padding:'6px 8px', fontSize:12, fontWeight:600, cursor:'pointer',
+                    display:'flex', alignItems:'center', gap:6, minWidth:0,
+                    borderTop: ri>0 ? '1px solid var(--line)' : 'none',
+                    position:'sticky', left:0, background:'var(--bg-card)', zIndex:1
+                  },
+                  onClick: () => globalFilter?.setGlobalBrand && globalFilter.setGlobalBrand([r.brand])
+                },
+                  h('span',{style:{color:'var(--ink-3)',fontSize:10,fontWeight:500,flexShrink:0,minWidth:16}}, (ri+1)+'.'),
+                  h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}, title:r.brand}, r.brand)
+                ),
+                ...r.cells.map((v, ci) => {
+                  const intensity = rowMaxes[ri] ? v / rowMaxes[ri] : 0;
+                  const k1 = k1List[ci];
+                  const bg = intensity > 0
+                    ? `color-mix(in srgb, ${katColor(k1)} ${Math.round(intensity*82+8)}%, var(--bg-card))`
+                    : 'var(--bg-card)';
+                  const txtColor = intensity > 0.55 ? '#fff' : 'var(--ink-2)';
+                  return h('div',{
+                    key:'c'+ri+'_'+ci,
+                    style:{
+                      padding:'8px 4px', fontSize:10, fontWeight:600, textAlign:'center',
+                      background: bg, color: txtColor, borderRadius:3,
+                      borderTop: ri>0 ? '1px solid var(--line)' : 'none',
+                      minHeight:28, display:'flex', alignItems:'center', justifyContent:'center'
+                    }, title: `${r.brand} · ${k1}: ${fmtFull(v)}`
+                  }, v > 0 ? fmtNum(v) : '·');
+                }),
+                h('div',{
+                  key:'t'+ri,
+                  style:{
+                    padding:'8px 6px', fontSize:11, fontWeight:700, textAlign:'right',
+                    color:'var(--ink)', borderTop: ri>0 ? '1px solid var(--line)' : 'none'
+                  }
+                }, fmtNum(r.total))
+              ])
+            )
+          )
+        );
+      })(),
+
       // ==== Small multiples + Polar peak ====
       h('div',{className:'grid grid-karne-saat', style:{gridTemplateColumns:'1fr 340px', gap:18, marginBottom:18}},
         h('div',{className:'card'},
@@ -1121,74 +1271,35 @@ window.TABS = (function(){
 
   // === Keyword Tab ===
   function KeywordTab({setKeywordModal, initialFilter, clearInitialFilter, globalFilter}) {
-    // Raw arrays (stable refs for deps). Sets are built inside memos to avoid fresh-ref invalidation.
-    const gK1 = globalFilter?.globalK1 || [];
-    const gK2 = globalFilter?.globalK2 || [];
-    const gK3 = globalFilter?.globalK3 || [];
-    const gBrand = globalFilter?.globalBrand || [];
-
+    // Filter state: sadece keyword arama + sort tab-level, Kat/Marka/Peak/Çeyrek/Bucket/Trend globalde.
     const [q, setQ] = React.useState('');
-    const [k1, setK1] = React.useState(initialFilter?.k1 || '');
-    const [k2, setK2] = React.useState(initialFilter?.k2 || '');
-    const [k3, setK3] = React.useState(initialFilter?.k3 || '');
-    const [bucket, setBucket] = React.useState('');
-    const [trendFilter, setTrendFilter] = React.useState(initialFilter?.trend || '');
     const [sort, setSort] = React.useState({k:'a25', d:-1});
-    const [peakMonth, setPeakMonth] = React.useState('');
-    const [peakQuarter, setPeakQuarter] = React.useState('');
     const [page, setPage] = React.useState(0);
     const perPage = 50;
 
-    // When initialFilter changes (e.g. came from another tab), apply it
+    // initialFilter (cross-tab drill-down) artık global'e yazılıyor
     React.useEffect(() => {
-      if (initialFilter) {
-        setK1(initialFilter.k1 || '');
-        setK2(initialFilter.k2 || '');
-        setK3(initialFilter.k3 || '');
-        setTrendFilter(initialFilter.trend || '');
+      if (initialFilter && globalFilter) {
+        if (initialFilter.k1 && globalFilter.setGlobalK1) {
+          globalFilter.setGlobalK1(initialFilter.k1 ? [initialFilter.k1] : []);
+        }
+        if (initialFilter.k2 && globalFilter.setGlobalK2) {
+          globalFilter.setGlobalK2(initialFilter.k2 ? [initialFilter.k2] : []);
+        }
+        if (initialFilter.k3 && globalFilter.setGlobalK3) {
+          globalFilter.setGlobalK3(initialFilter.k3 ? [initialFilter.k3] : []);
+        }
+        if (initialFilter.trend && globalFilter.setGlobalTrend) {
+          globalFilter.setGlobalTrend(initialFilter.trend);
+        }
         if (clearInitialFilter) clearInitialFilter();
       }
     }, [initialFilter]);
 
-    const k2Options = React.useMemo(() => kat2InK1(k1), [k1]);
-    const k3Options = React.useMemo(() => kat3InK1K2(k1, k2), [k1, k2]);
-
-    React.useEffect(() => { if (k2 && !k2Options.includes(k2)) setK2(''); }, [k1]);
-    React.useEffect(() => { if (k3 && !k3Options.includes(k3)) setK3(''); }, [k1, k2]);
-
     const filtered = React.useMemo(() => {
-      // Build sets inside memo so deps can be stable raw arrays
-      const gK1Set = gK1.length ? new Set(gK1) : null;
-      const gK2Set = gK2.length ? new Set(gK2) : null;
-      const gK3Set = gK3.length ? new Set(gK3) : null;
-      const gBrandSet = gBrand.length ? new Set(gBrand) : null;
-      let rows = D.keywords;
-      // Global filter (scope): Kat 1/2/3 + Marka
-      if (gK1Set) rows = rows.filter(r => gK1Set.has(r.k1));
-      if (gK2Set) rows = rows.filter(r => gK2Set.has(r.k2));
-      if (gK3Set) rows = rows.filter(r => gK3Set.has(r.k3));
-      if (gBrandSet) rows = rows.filter(r => gBrandSet.has(r.brand));
-      // Tab-level filters
+      let rows = applyGlobalFilter(D.keywords, globalFilter);
       const qq = q.trim().toLowerCase();
       if (qq) rows = rows.filter(r => r.kw.toLowerCase().includes(qq));
-      if (k1) rows = rows.filter(r => r.k1 === k1);
-      if (k2) rows = rows.filter(r => r.k2 === k2);
-      if (k3) rows = rows.filter(r => r.k3 === k3);
-      if (bucket) rows = rows.filter(r => r.bucket === bucket);
-      if (trendFilter === 'rising') rows = rows.filter(r => r.yoy > 0.05);
-      if (trendFilter === 'falling') rows = rows.filter(r => r.yoy < -0.05);
-      if (trendFilter === 'stable') rows = rows.filter(r => r.yoy >= -0.05 && r.yoy <= 0.05);
-      if (peakMonth !== '') {
-        const mi = +peakMonth;
-        rows = rows.filter(r => r.m25.indexOf(Math.max(...r.m25)) === mi);
-      }
-      if (peakQuarter !== '') {
-        const qi = +peakQuarter;  // 0..3
-        rows = rows.filter(r => {
-          const pi = r.m25.indexOf(Math.max(...r.m25));
-          return Math.floor(pi / 3) === qi;
-        });
-      }
       const s = sort.k, d = sort.d;
       rows = [...rows].sort((a,b) => {
         const av = a[s], bv = b[s];
@@ -1196,12 +1307,11 @@ window.TABS = (function(){
         return (av > bv ? 1 : av < bv ? -1 : 0) * d;
       });
       return rows;
-    }, [q, k1, k2, k3, bucket, sort, peakMonth, peakQuarter, trendFilter, gK1, gK2, gK3, gBrand]);
+    }, [q, sort, globalFilter]);
 
-    React.useEffect(() => setPage(0), [q, k1, k2, k3, bucket, peakMonth, peakQuarter, trendFilter, gK1, gK2, gK3, gBrand]);
+    React.useEffect(() => setPage(0), [q, globalFilter]);
     const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
     const totalPages = Math.ceil(filtered.length/perPage);
-    const buckets = [...new Set(D.keywords.map(k=>k.bucket))].filter(Boolean);
 
     const sumVol = filtered.reduce((a,k)=>a+(k.a25||0),0)*12;
     const sumVol24 = filtered.reduce((a,k)=>a+(k.a24||0),0)*12;
@@ -1216,45 +1326,13 @@ window.TABS = (function(){
     }, label, sort.k===k ? (sort.d>0?' ↑':' ↓') : '');
 
     return h('div',null,
+      // Sadece keyword arama + CSV export — diğer filtreler üst globalde
       h('div',{className:'toolbar'},
-        h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:160}}),
-        h('select',{className:'select', value:k1, onChange:e=>{setK1(e.target.value); setK2(''); setK3('');}},
-          h('option',{value:''}, 'Tüm Kat 1'),
-          D.kat1Summary.map(k => h('option',{key:k.k1, value:k.k1}, k.k1))
-        ),
-        h('select',{className:'select', value:k2, onChange:e=>{setK2(e.target.value); setK3('');}},
-          h('option',{value:''}, 'Tüm Kat 2'),
-          k2Options.map(k => h('option',{key:k, value:k}, k))
-        ),
-        h('select',{className:'select', value:k3, onChange:e=>setK3(e.target.value)},
-          h('option',{value:''}, 'Tüm Kat 3'),
-          k3Options.map(k => h('option',{key:k, value:k}, k))
-        ),
-      ),
-      h('div',{className:'toolbar'},
-        h('div',{className:'segmented'},
-          h('button',{className:trendFilter===''?'active':'', onClick:()=>setTrendFilter('')}, 'Tüm Trendler'),
-          h('button',{className:trendFilter==='rising'?'active':'', onClick:()=>setTrendFilter('rising')}, '↑ Yükselen'),
-          h('button',{className:trendFilter==='stable'?'active':'', onClick:()=>setTrendFilter('stable')}, '→ Stabil'),
-          h('button',{className:trendFilter==='falling'?'active':'', onClick:()=>setTrendFilter('falling')}, '↓ Düşen')
-        ),
-        h('select',{className:'select', value:bucket, onChange:e=>setBucket(e.target.value)},
-          h('option',{value:''}, 'Tüm Hacim Aralıkları'),
-          buckets.map(b => h('option',{key:b, value:b}, b))
-        ),
-        h('select',{className:'select', value:peakMonth, onChange:e=>setPeakMonth(e.target.value)},
-          h('option',{value:''}, 'Tüm Peak Ayları'),
-          TR_MONTHS.map((m,i) => h('option',{key:i, value:i}, 'Peak: '+m))
-        ),
-        h('select',{className:'select', value:peakQuarter, onChange:e=>setPeakQuarter(e.target.value)},
-          h('option',{value:''}, 'Tüm Peak Çeyrekleri'),
-          ['Q1 (Oca-Mar)','Q2 (Nis-Haz)','Q3 (Tem-Eyl)','Q4 (Eki-Ara)'].map((lbl,i) => h('option',{key:i, value:i}, 'Peak: '+lbl))
-        ),
-        h('div',{style:{flex:1}}),
-        h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{setQ('');setK1('');setK2('');setK3('');setBucket('');setPeakMonth('');setPeakQuarter('');setTrendFilter('');}}, '× Temizle'),
+        h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:200}}),
+        h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
-            {label:'Keyword',key:'kw'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
+            {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
             {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'}, {label:'Bucket',key:'bucket'},
             {label:'Peak Ay', get:r=>TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))]},
             {label:'Peak Çeyrek', get:r=>'Q'+(Math.floor(r.m25.indexOf(Math.max(...r.m25))/3)+1)},
@@ -1264,23 +1342,11 @@ window.TABS = (function(){
         }}, '↓ CSV'),
       ),
 
-      // Active filter chips
-      (k1 || k2 || k3 || trendFilter || bucket || peakMonth !== '' || peakQuarter !== '') && h('div',{className:'filter-chips'},
-        h('span',{className:'lbl'}, 'Aktif:'),
-        k1 && h('button',{className:'filter-chip', onClick:()=>{setK1('');setK2('');setK3('');}}, k1, h('span',{className:'x'},'×')),
-        k2 && h('button',{className:'filter-chip', onClick:()=>{setK2('');setK3('');}}, k2, h('span',{className:'x'},'×')),
-        k3 && h('button',{className:'filter-chip', onClick:()=>setK3('')}, k3, h('span',{className:'x'},'×')),
-        trendFilter && h('button',{className:'filter-chip', onClick:()=>setTrendFilter('')}, trendFilter==='rising'?'↑ Yükselen':trendFilter==='falling'?'↓ Düşen':'Stabil', h('span',{className:'x'},'×')),
-        bucket && h('button',{className:'filter-chip', onClick:()=>setBucket('')}, bucket, h('span',{className:'x'},'×')),
-        peakMonth !== '' && h('button',{className:'filter-chip', onClick:()=>setPeakMonth('')}, 'Peak: '+TR_MONTHS[+peakMonth], h('span',{className:'x'},'×')),
-        peakQuarter !== '' && h('button',{className:'filter-chip', onClick:()=>setPeakQuarter('')}, 'Peak: Q'+(+peakQuarter+1), h('span',{className:'x'},'×'))
-      ),
-
       h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:14}},
-        h(Kpi,{label:'Filtrelenen KW', value:fmtFull(filtered.length), sub:`${TOTAL_KW} toplam içinden`, accent:true}),
+        h(Kpi,{label:'Filtrelenen KW', value:fmtNum(filtered.length), sub:`${TOTAL_KW} toplam içinden`, accent:true}),
         h(Kpi,{label:'Toplam Hacim', value:fmtNum(sumVol), chip:fmtPct(sumYoY), chipClass:trendClass(sumYoY), sub:'2025 toplam'}),
-        h(Kpi,{label:'Yükselen', value:fmtFull(risingInView), chip:'↑', chipClass:'pos', sub:'görünen içinde'}),
-        h(Kpi,{label:'Düşen', value:fmtFull(fallingInView), chip:'↓', chipClass:'neg', sub:'görünen içinde'}),
+        h(Kpi,{label:'Yükselen', value:fmtNum(risingInView), chip:'↑', chipClass:'pos', sub:'görünen içinde'}),
+        h(Kpi,{label:'Düşen', value:fmtNum(fallingInView), chip:'↓', chipClass:'neg', sub:'görünen içinde'}),
       ),
 
       h('div',{className:'card flush'},
@@ -1339,33 +1405,12 @@ window.TABS = (function(){
 
   // === Trendler Tab ===
   function TrendlerTab({setKeywordModal, onNavigateKw, globalFilter}) {
-    const gK1 = globalFilter?.globalK1 || [];
-    const gK2 = globalFilter?.globalK2 || [];
-    const gK3 = globalFilter?.globalK3 || [];
-    const gBrand = globalFilter?.globalBrand || [];
-    const gK1Set = gK1.length ? new Set(gK1) : null;
-    const gK2Set = gK2.length ? new Set(gK2) : null;
-    const gK3Set = gK3.length ? new Set(gK3) : null;
-    const gBrandSet = gBrand.length ? new Set(gBrand) : null;
-
+    // All filters live in the global bar — tab-level filter row was removed.
     const [tab, setTab] = React.useState('rising');
     const [limit, setLimit] = React.useState(20);
-    // Filters for the main top rising/falling tables (tab-level refinement on top of global filter)
-    const [filterK1, setFilterK1] = React.useState('');
-    const [filterK2, setFilterK2] = React.useState('');
-    const [filterK3, setFilterK3] = React.useState('');
-    const [filterSezType, setFilterSezType] = React.useState('');
-    const [filterPeak, setFilterPeak] = React.useState('');
-    const [filterMinVol, setFilterMinVol] = React.useState(0);
 
     const [trendCatLevel, setTrendCatLevel] = React.useState('kat1');
     const [trendCatFilter, setTrendCatFilter] = React.useState({k1:'',k2:''});
-
-    // Dependent dropdowns
-    const k2Options = React.useMemo(() => kat2InK1(filterK1), [filterK1]);
-    const k3Options = React.useMemo(() => kat3InK1K2(filterK1, filterK2), [filterK1, filterK2]);
-    React.useEffect(() => { if (filterK2 && !k2Options.includes(filterK2)) setFilterK2(''); }, [filterK1]);
-    React.useEffect(() => { if (filterK3 && !k3Options.includes(filterK3)) setFilterK3(''); }, [filterK1, filterK2]);
 
     // sezType map (keyword -> type)
     const sezTypeMap = React.useMemo(() => {
@@ -1374,31 +1419,10 @@ window.TABS = (function(){
       return m;
     }, []);
 
-    // Filter the full keyword universe for this tab's filters.
-    // Global filter (K1/K2/K3/Brand) scope'unu + tab-level refinement'ları birlikte uygular.
-    const filteredKws = React.useMemo(() => {
-      return D.keywords.filter(k => {
-        // Global filter
-        if (gK1Set && !gK1Set.has(k.k1)) return false;
-        if (gK2Set && !gK2Set.has(k.k2)) return false;
-        if (gK3Set && !gK3Set.has(k.k3)) return false;
-        if (gBrandSet && !gBrandSet.has(k.brand)) return false;
-        // Tab-level filter
-        if (filterK1 && k.k1 !== filterK1) return false;
-        if (filterK2 && k.k2 !== filterK2) return false;
-        if (filterK3 && k.k3 !== filterK3) return false;
-        if (filterMinVol > 0 && (k.a25 || 0) < filterMinVol) return false;
-        if (filterPeak !== '') {
-          const pi = k.m25.indexOf(Math.max(...k.m25));
-          if (pi !== +filterPeak) return false;
-        }
-        if (filterSezType) {
-          const t = sezTypeMap.get(k.kw + '|' + k.k1);
-          if (t !== filterSezType) return false;
-        }
-        return true;
-      });
-    }, [gK1, gK2, gK3, gBrand, filterK1, filterK2, filterK3, filterSezType, filterPeak, filterMinVol, sezTypeMap]);
+    // filteredKws = D.keywords scoped by global filter (Kat1/2/3/Marka/PeakAy/PeakÇ/SezTipi/Bucket/Trend)
+    const filteredKws = React.useMemo(() =>
+      applyGlobalFilter(D.keywords, globalFilter, sezTypeMap)
+    , [globalFilter, sezTypeMap]);
 
     const risingAll = React.useMemo(() => filteredKws.filter(k => k.yoy > 0.05), [filteredKws]);
     const fallingAll = React.useMemo(() => filteredKws.filter(k => k.yoy < -0.05), [filteredKws]);
@@ -1484,42 +1508,11 @@ window.TABS = (function(){
       }).filter(c => c.total > 0).sort((a,b) => b.total - a.total).slice(0, 20);
     }, [trendCatLevel, trendCatFilter, filteredKws]);
 
-    const activeFilterCount = (filterK1?1:0) + (filterK2?1:0) + (filterK3?1:0) + (filterSezType?1:0) + (filterPeak!==''?1:0) + (filterMinVol>0?1:0);
-    const clearFilters = () => { setFilterK1(''); setFilterK2(''); setFilterK3(''); setFilterSezType(''); setFilterPeak(''); setFilterMinVol(0); };
-
     // Sample percentile for "en çok artan / düşen" KPIs on filtered set
     const topChangedUp = topRising[0];
     const topChangedDown = topFalling[0];
 
     return h('div',null,
-      // Filter toolbar
-      h('div',{className:'toolbar'},
-        h('select',{className:'select', value:filterK1, onChange:e=>{setFilterK1(e.target.value); setFilterK2(''); setFilterK3('');}},
-          h('option',{value:''}, 'Tüm Kat 1'),
-          D.kat1Summary.map(k => h('option',{key:k.k1, value:k.k1}, k.k1))
-        ),
-        h('select',{className:'select', value:filterK2, onChange:e=>{setFilterK2(e.target.value); setFilterK3('');}},
-          h('option',{value:''}, 'Tüm Kat 2'),
-          k2Options.map(k => h('option',{key:k, value:k}, k))
-        ),
-        h('select',{className:'select', value:filterK3, onChange:e=>setFilterK3(e.target.value)},
-          h('option',{value:''}, 'Tüm Kat 3'),
-          k3Options.map(k => h('option',{key:k, value:k}, k))
-        ),
-        h('select',{className:'select', value:filterSezType, onChange:e=>setFilterSezType(e.target.value)},
-          h('option',{value:''}, 'Tüm Mevsim Tipi'),
-          ['Evergreen','Orta Mevsimsellik','Yüksek Mevsimsellik'].map(t => h('option',{key:t,value:t}, t))
-        ),
-        h('select',{className:'select', value:filterPeak, onChange:e=>setFilterPeak(e.target.value)},
-          h('option',{value:''}, 'Tüm Peak Ayları'),
-          TR_MONTHS.map((m,i) => h('option',{key:i, value:i}, 'Peak: '+m))
-        ),
-        h('select',{className:'select', value:filterMinVol, onChange:e=>setFilterMinVol(+e.target.value)},
-          [0, 100, 500, 1000, 5000, 10000].map(v => h('option',{key:v, value:v}, v===0 ? 'Min. Hacim: Tümü' : 'Min. Hacim: ' + fmtNum(v)))
-        ),
-        activeFilterCount > 0 && h('button',{className:'chip-btn',style:{padding:'6px 12px',borderRadius:999}, onClick:clearFilters}, '× Temizle ('+activeFilterCount+')')
-      ),
-
       (() => {
         // Dynamic YoY stats on the FILTERED set
         const nFil = filteredKws.length || 1;
@@ -1813,6 +1806,7 @@ window.TABS = (function(){
               h('thead',null,
                 h('tr',null,
                   h('th',null,'Keyword'),
+                  h('th',null,'Marka'),
                   h('th',null,'Kategori'),
                   h('th',{className:'num'},'2025'),
                   h('th',{className:'num'},'YoY'),
@@ -1820,12 +1814,14 @@ window.TABS = (function(){
                 )
               ),
               h('tbody',null,
-                sorted.length === 0 && h('tr',null, h('td',{colSpan:5, className:'empty'}, 'Filtreye uyan fiyat intent keyword yok')),
+                sorted.length === 0 && h('tr',null, h('td',{colSpan:6, className:'empty'}, 'Filtreye uyan fiyat intent keyword yok')),
                 sorted.map((r,i) => {
                   const mi = serialToMonthIdx(r.peakMonth);
                   const full = kwByKw.get(r.kw);
+                  const brand = full?.brand || '';
                   return h('tr',{key:i, className:'clickable', onClick:()=>full && setKeywordModal(full)},
                     h('td',{className:'kw-cell'}, r.kw),
+                    h('td',{style:{fontSize:11, fontWeight: brand ? 500 : 400, color: brand ? 'var(--ink)' : 'var(--ink-3)'}}, brand || '—'),
                     h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k1),
                     h('td',{className:'num', title: fmtFull(r.a25)}, fmtNum(r.a25)),
                     h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
@@ -1851,15 +1847,10 @@ window.TABS = (function(){
   }
 
   // === Out-of-Catalog Tab — Özdilekte Olmayan Markalar ===
-  function OutOfCatalogTab({setKeywordModal, globalFilter}) {
+  function OutOfCatalogTab({setKeywordModal, onNavigateKw, globalFilter}) {
     const OUT = D.outKeywords || [];
-    const gK1 = globalFilter?.globalK1 || [];
-    const gK2 = globalFilter?.globalK2 || [];
-    const gK3 = globalFilter?.globalK3 || [];
-    const gBrand = globalFilter?.globalBrand || [];
 
     const [q, setQ] = React.useState('');
-    const [trendFilter, setTrendFilter] = React.useState('');
     const [sort, setSort] = React.useState({k:'a25', d:-1});
     const [brandSort, setBrandSort] = React.useState({k:'sum25', d:-1});
     const [brandQ, setBrandQ] = React.useState('');
@@ -1877,21 +1868,10 @@ window.TABS = (function(){
       });
     };
 
-    // Global filter sets
-    const k1Set = gK1.length ? new Set(gK1) : null;
-    const k2Set = gK2.length ? new Set(gK2) : null;
-    const k3Set = gK3.length ? new Set(gK3) : null;
-    const brandSet = gBrand.length ? new Set(gBrand) : null;
-
-    // Scope = all OUT filtered by global Kat + Brand
-    const scopedKws = React.useMemo(() => {
-      let rows = OUT;
-      if (k1Set) rows = rows.filter(r => k1Set.has(r.k1));
-      if (k2Set) rows = rows.filter(r => k2Set.has(r.k2));
-      if (k3Set) rows = rows.filter(r => k3Set.has(r.k3));
-      if (brandSet) rows = rows.filter(r => brandSet.has(r.brand));
-      return rows;
-    }, [gK1, gK2, gK3, gBrand]);
+    // Scope = all OUT filtered by global filter (tab-level filters removed)
+    const scopedKws = React.useMemo(() =>
+      applyGlobalFilter(OUT, globalFilter)
+    , [globalFilter]);
 
     // Aggregates (filter-aware)
     const agg = React.useMemo(() => {
@@ -1992,13 +1972,11 @@ window.TABS = (function(){
     const brandPageRows = brandRows.slice(brandPage*brandsPerPage, (brandPage+1)*brandsPerPage);
     const brandTotalPages = Math.ceil(brandRows.length/brandsPerPage);
 
-    // Keyword filter (includes search)
+    // Keyword filter (tab-level search)
     const filtered = React.useMemo(() => {
       let rows = scopedKws;
       const qq = q.trim().toLowerCase();
       if (qq) rows = rows.filter(r => r.kw.toLowerCase().includes(qq));
-      if (trendFilter === 'rising') rows = rows.filter(r => r.yoy > 0.05);
-      if (trendFilter === 'falling') rows = rows.filter(r => r.yoy < -0.05);
       const s = sort.k, d = sort.d;
       rows = [...rows].sort((a,b) => {
         const av = a[s], bv = b[s];
@@ -2006,9 +1984,9 @@ window.TABS = (function(){
         return (av > bv ? 1 : av < bv ? -1 : 0) * d;
       });
       return rows;
-    }, [scopedKws, q, trendFilter, sort]);
+    }, [scopedKws, q, sort]);
 
-    React.useEffect(() => setPage(0), [q, trendFilter, scopedKws]);
+    React.useEffect(() => setPage(0), [q, scopedKws]);
     const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
     const totalPages = Math.ceil(filtered.length/perPage);
 
@@ -2024,7 +2002,8 @@ window.TABS = (function(){
       onClick:()=>setBrandSort({k, d: brandSort.k===k ? -brandSort.d : -1})
     }, label, brandSort.k===k ? (brandSort.d>0?' ↑':' ↓') : '');
 
-    const hasFilterActive = gK1.length || gK2.length || gK3.length || gBrand.length;
+    const gBrand = globalFilter?.globalBrand || [];
+    const hasFilterActive = !!globalFilter?.hasGlobalFilter;
     const singleBrand = gBrand.length === 1 ? gBrand[0] : null;
 
     return h('div',null,
@@ -2100,7 +2079,15 @@ window.TABS = (function(){
             )
           )),
           byK1.length > 0
-            ? h(ShareBars,{rows: byK1.slice(0, 12)})
+            ? h(ShareBars,{
+                rows: byK1.slice(0, 12),
+                activeLabels: globalFilter?.globalK1 || [],
+                onClickRow: (label) => {
+                  const cur = globalFilter?.globalK1 || [];
+                  if (cur.includes(label)) globalFilter.setGlobalK1(cur.filter(x => x !== label));
+                  else globalFilter.setGlobalK1([...cur, label]);
+                }
+              })
             : h('div',{className:'empty', style:{padding:30}}, 'Veri yok')
         )
       ),
@@ -2217,7 +2204,15 @@ window.TABS = (function(){
                   h('td',{className:'num'}, fmtNum(b.sum24)),
                   h('td',{className:'num'}, fmtNum(b.sum25)),
                   h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
-                  h('td',{style:{width:110}}, h(Sparkline,{values:b.m25, w:100, h:26})),
+                  h('td',{style:{width:130}},
+                    h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+                      h(Sparkline,{values:b.m25, w:90, h:26}),
+                      (() => { const arr = recentTrendArrow(b.m25); return arr ? h('span',{
+                        title: arr.title,
+                        style:{fontSize:14, fontWeight:700, color: arr.color, lineHeight:1}
+                      }, arr.char) : null; })()
+                    )
+                  ),
                   h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, TR_MONTHS[b.peakI]) : '-'),
                   h('td',{style:{fontSize:11}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
@@ -2234,8 +2229,19 @@ window.TABS = (function(){
                 const subRow = h('tr',{key:'s'+i},
                   h('td',{colSpan:11, style:{padding:0, background:'var(--line-soft)'}},
                     h('div',{style:{padding:'12px 16px 14px'}},
-                      h('div',{style:{fontSize:11, color:'var(--ink-3)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
-                        `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
+                      h('div',{style:{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:8}},
+                        h('div',{style:{fontSize:11, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
+                          `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
+                        ),
+                        onNavigateKw && globalFilter && h('button',{
+                          className:'chip-btn',
+                          style:{padding:'4px 10px', borderRadius:999, fontSize:11, cursor:'pointer'},
+                          onClick: (e) => {
+                            e.stopPropagation();
+                            if (globalFilter.setGlobalBrand) globalFilter.setGlobalBrand([b.brand]);
+                            onNavigateKw({});  // navigate to Keyword tab
+                          }
+                        }, 'Keyword tab\'ında aç →')
                       ),
                       h('table',{className:'tbl', style:{background:'var(--bg-card)', marginBottom:0}},
                         h('thead',null, h('tr',null,
@@ -2287,13 +2293,7 @@ window.TABS = (function(){
 
       // Keyword table (filtrelerle sınırlı)
       h('div',{className:'toolbar'},
-        h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:180}}),
-        h('div',{className:'segmented'},
-          h('button',{className:trendFilter===''?'active':'', onClick:()=>setTrendFilter('')}, 'Tümü'),
-          h('button',{className:trendFilter==='rising'?'active':'', onClick:()=>setTrendFilter('rising')}, '↑ Yükselen'),
-          h('button',{className:trendFilter==='falling'?'active':'', onClick:()=>setTrendFilter('falling')}, '↓ Düşen')
-        ),
-        h('div',{style:{flex:1}}),
+        h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:200}}),
         h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
@@ -2353,12 +2353,7 @@ window.TABS = (function(){
   }
 
   // === Brand Tab ===
-  function BrandTab({setKeywordModal, globalFilter}) {
-    const gK1 = globalFilter?.globalK1 || [];
-    const gK2 = globalFilter?.globalK2 || [];
-    const gK3 = globalFilter?.globalK3 || [];
-    const gBrand = globalFilter?.globalBrand || [];
-
+  function BrandTab({setKeywordModal, onNavigateKw, globalFilter}) {
     const [q, setQ] = React.useState('');
     const [catFilter, setCatFilter] = React.useState('');  // '' | 'Var' | 'Yok'
     const [sort, setSort] = React.useState({k:'sum25', d:-1});
@@ -2374,22 +2369,11 @@ window.TABS = (function(){
       });
     };
 
-    // Global filter sets
-    const k1Set = gK1.length ? new Set(gK1) : null;
-    const k2Set = gK2.length ? new Set(gK2) : null;
-    const k3Set = gK3.length ? new Set(gK3) : null;
-    const brandSet = gBrand.length ? new Set(gBrand) : null;
-
     // Pool = all keywords (in + out), respecting global filter
     const scopedKws = React.useMemo(() => {
       const pool = (D.keywords || []).concat(D.outKeywords || []);
-      let rows = pool.filter(k => !!k.brand); // brand tab needs a brand
-      if (k1Set) rows = rows.filter(r => k1Set.has(r.k1));
-      if (k2Set) rows = rows.filter(r => k2Set.has(r.k2));
-      if (k3Set) rows = rows.filter(r => k3Set.has(r.k3));
-      if (brandSet) rows = rows.filter(r => brandSet.has(r.brand));
-      return rows;
-    }, [gK1, gK2, gK3, gBrand]);
+      return applyGlobalFilter(pool.filter(k => !!k.brand), globalFilter);
+    }, [globalFilter]);
 
     // Build brands from scoped keywords (filter-aware)
     const allBrands = React.useMemo(() => {
@@ -2477,7 +2461,7 @@ window.TABS = (function(){
       onClick:()=>setSort({k, d: sort.k===k ? -sort.d : -1})
     }, label, sort.k===k ? (sort.d>0?' ↑':' ↓') : '');
 
-    const hasFilterActive = gK1.length || gK2.length || gK3.length || gBrand.length;
+    const hasFilterActive = !!globalFilter?.hasGlobalFilter;
 
     return h('div',null,
       h(SectionHeader, {
@@ -2573,14 +2557,14 @@ window.TABS = (function(){
             ),
             h('span',{className:'txt-3', style:{fontSize:11}}, topBrands15.length + ' marka × ' + k1List.length + ' kategori · satır-normalize')
           ),
-          h('div',{className:'bkm-scroll', style:{overflow:'auto', padding:'0 14px 14px'}},
+          h('div',{className:'bkm-scroll', style:{overflow:'auto', padding:'0 14px 14px', position:'relative'}},
             h('div',{className:'bkm-grid', style:{
               display:'grid',
-              gridTemplateColumns: `minmax(130px, 180px) repeat(${k1List.length}, minmax(70px, 1fr)) minmax(70px, 90px)`,
-              gap:2, minWidth: (130 + k1List.length*70 + 70) + 'px'
+              gridTemplateColumns: `minmax(140px, 180px) repeat(${k1List.length}, minmax(70px, 1fr)) minmax(70px, 90px)`,
+              gap:2, minWidth: (140 + k1List.length*70 + 70) + 'px'
             }},
-              // Header row
-              h('div',{style:{padding:'8px 6px', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em'}}, 'Marka'),
+              // Header row — first column sticky for horizontal scroll
+              h('div',{style:{padding:'8px 6px', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', left:0, background:'var(--bg-card)', zIndex:2}}, 'Marka'),
               ...k1List.map(k1 => h('div',{
                 key:'h'+k1,
                 style:{
@@ -2599,7 +2583,8 @@ window.TABS = (function(){
                   style:{
                     padding:'6px 8px', fontSize:12, fontWeight:600, cursor:'pointer',
                     display:'flex', alignItems:'center', gap:6, minWidth:0,
-                    borderTop: ri>0 ? '1px solid var(--line)' : 'none'
+                    borderTop: ri>0 ? '1px solid var(--line)' : 'none',
+                    position:'sticky', left:0, background:'var(--bg-card)', zIndex:1
                   }
                 },
                   h('span',{style:{color:'var(--ink-3)',fontSize:10,fontWeight:500,flexShrink:0,minWidth:16}}, (ri+1)+'.'),
@@ -2665,7 +2650,15 @@ window.TABS = (function(){
                   h('td',{className:'num'}, fmtNum(b.sum24)),
                   h('td',{className:'num'}, fmtNum(b.sum25)),
                   h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
-                  h('td',{style:{width:110}}, h(Sparkline,{values:b.m25, w:100, h:26})),
+                  h('td',{style:{width:130}},
+                    h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+                      h(Sparkline,{values:b.m25, w:90, h:26}),
+                      (() => { const arr = recentTrendArrow(b.m25); return arr ? h('span',{
+                        title: arr.title,
+                        style:{fontSize:14, fontWeight:700, color: arr.color, lineHeight:1}
+                      }, arr.char) : null; })()
+                    )
+                  ),
                   h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, TR_MONTHS[b.peakI]) : '-'),
                   h('td',{style:{fontSize:11}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
@@ -2680,8 +2673,19 @@ window.TABS = (function(){
                 const subRow = h('tr',{key:'s'+i},
                   h('td',{colSpan:10, style:{padding:0, background:'var(--line-soft)'}},
                     h('div',{style:{padding:'12px 16px 14px'}},
-                      h('div',{style:{fontSize:11, color:'var(--ink-3)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
-                        `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
+                      h('div',{style:{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:8}},
+                        h('div',{style:{fontSize:11, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
+                          `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
+                        ),
+                        onNavigateKw && globalFilter && h('button',{
+                          className:'chip-btn',
+                          style:{padding:'4px 10px', borderRadius:999, fontSize:11, cursor:'pointer'},
+                          onClick: (e) => {
+                            e.stopPropagation();
+                            if (globalFilter.setGlobalBrand) globalFilter.setGlobalBrand([b.brand]);
+                            onNavigateKw({});  // navigate to Keyword tab
+                          }
+                        }, 'Keyword tab\'ında aç →')
                       ),
                       h('table',{className:'tbl', style:{background:'var(--bg-card)', marginBottom:0}},
                         h('thead',null, h('tr',null,

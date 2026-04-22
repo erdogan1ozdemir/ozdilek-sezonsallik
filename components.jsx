@@ -187,24 +187,42 @@ window.C = (function(){
     );
   }
 
-  function ShareBars({rows}) {
+  function ShareBars({rows, onClickRow, activeLabels}) {
     const sorted = [...rows].sort((a,b) => b.value - a.value);
     const max = sorted[0]?.value || 1;
+    const activeSet = activeLabels ? new Set(activeLabels) : null;
     return h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
-      sorted.map((r,i) => h('div',{key:i},
-        h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}},
-          h('div',null,
-            h('span',{style:{fontWeight:600}}, r.label),
-            r.share != null && h('span',{className:'txt-3', style:{marginLeft:6}}, ' ' + (r.share*100).toFixed(1).replace('.',',')+'%')
+      sorted.map((r,i) => {
+        const isActive = activeSet ? activeSet.has(r.label) : false;
+        const canClick = typeof onClickRow === 'function';
+        return h('div',{
+          key:i,
+          className: canClick ? 'share-row clickable' : 'share-row',
+          onClick: canClick ? () => onClickRow(r.label) : undefined,
+          style: {
+            cursor: canClick ? 'pointer' : 'default',
+            padding: canClick ? '4px 6px' : 0,
+            margin: canClick ? '-4px -6px' : 0,
+            borderRadius: 6,
+            background: isActive ? 'color-mix(in srgb, var(--coral) 10%, transparent)' : 'transparent',
+            transition: 'background .15s'
+          }
+        },
+          h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}},
+            h('div',null,
+              isActive && h('span',{style:{marginRight:4,color:'var(--coral-deep)',fontSize:10}}, '●'),
+              h('span',{style:{fontWeight:600}}, r.label),
+              r.share != null && h('span',{className:'txt-3', style:{marginLeft:6}}, ' ' + (r.share*100).toFixed(1).replace('.',',')+'%')
+            ),
+            h('div',{className:'num', style:{fontWeight:600}, title: fmtFull(r.value)}, fmtNum(r.value),
+              r.yoy != null && h('span',{style:{marginLeft:8}}, h(YoYPill,{yoy:r.yoy}))
+            )
           ),
-          h('div',{className:'num', style:{fontWeight:600}, title: fmtFull(r.value)}, fmtNum(r.value),
-            r.yoy != null && h('span',{style:{marginLeft:8}}, h(YoYPill,{yoy:r.yoy}))
+          h('div',{className:'tree-bar'},
+            h('div',{className:'fill', style:{width:(r.value/max*100)+'%', background: r.color || 'var(--accent)'}})
           )
-        ),
-        h('div',{className:'tree-bar'},
-          h('div',{className:'fill', style:{width:(r.value/max*100)+'%', background: r.color || 'var(--accent)'}})
-        )
-      ))
+        );
+      })
     );
   }
 
@@ -555,23 +573,35 @@ window.C = (function(){
   }
 
   // MultiSelect - dropdown with checkboxes for multi-category selection
-  function MultiSelect({label, options, selected, onChange, colorMap, maxDisplay=2, width=180}) {
+  function MultiSelect({label, options, selected, onChange, colorMap, maxDisplay=2, width=180, searchable=true}) {
     const [open, setOpen] = React.useState(false);
+    const [query, setQuery] = React.useState('');
     const ref = React.useRef(null);
+    const inputRef = React.useRef(null);
     React.useEffect(() => {
-      const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+      const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQuery(''); } };
       document.addEventListener('mousedown', onDoc);
       return () => document.removeEventListener('mousedown', onDoc);
     }, []);
+    React.useEffect(() => {
+      if (open && inputRef.current) { setTimeout(() => inputRef.current?.focus(), 10); }
+    }, [open]);
+
     const toggle = (opt) => {
       if (selected.includes(opt)) onChange(selected.filter(o => o !== opt));
       else onChange([...selected, opt]);
     };
-    const allSelected = selected.length === 0 || selected.length === options.length;
     const displayText = selected.length === 0 ? `Tüm ${label}` :
       selected.length === 1 ? selected[0] :
       selected.length <= maxDisplay ? selected.join(', ') :
       `${selected.length} seçili`;
+
+    // Filter options by search query (case-insensitive, Turkish-friendly)
+    const filteredOptions = React.useMemo(() => {
+      if (!query.trim()) return options;
+      const q = query.toLowerCase().trim();
+      return options.filter(o => String(o).toLowerCase().includes(q));
+    }, [options, query]);
 
     return h('div',{ref, className:'multiselect', style:{width}},
       h('button',{
@@ -579,22 +609,44 @@ window.C = (function(){
         onClick:()=>setOpen(!open)
       },
         h('span',{className:'ms-text'}, displayText),
+        selected.length > 0 && h('span',{
+          className:'ms-count',
+          style:{marginLeft:'auto',marginRight:6,fontSize:10,padding:'1px 6px',borderRadius:8,background:'var(--coral-soft,rgba(255,123,83,.15))',color:'var(--coral-deep)',fontWeight:700}
+        }, selected.length),
         h('span',{className:'ms-caret'}, '▾')
       ),
       open && h('div',{className:'multiselect-panel'},
+        searchable && h('div',{className:'ms-search-wrap', style:{padding:'8px 10px 6px', borderBottom:'1px solid var(--line)'}},
+          h('input',{
+            ref: inputRef,
+            type:'text',
+            className:'ms-search',
+            placeholder: `${label} ara…`,
+            value: query,
+            onChange: e => setQuery(e.target.value),
+            style:{
+              width:'100%', padding:'6px 10px', fontSize:12,
+              border:'1px solid var(--line)', borderRadius:6,
+              background:'var(--bg)', color:'var(--ink)', outline:'none'
+            }
+          })
+        ),
         h('div',{className:'ms-actions'},
-          h('button',{className:'ms-action', onClick:()=>onChange([])}, 'Tümü'),
-          h('button',{className:'ms-action', onClick:()=>onChange([...options])}, 'Hepsi')
+          h('button',{className:'ms-action', onClick:()=>onChange([])}, 'Hiçbiri'),
+          h('button',{className:'ms-action', onClick:()=>onChange([...options])}, 'Hepsi'),
+          query && h('span',{style:{fontSize:10,color:'var(--ink-3)',marginLeft:'auto',paddingRight:4}}, filteredOptions.length + '/' + options.length)
         ),
         h('div',{className:'ms-options'},
-          options.map(opt => {
-            const isChecked = selected.length === 0 ? false : selected.includes(opt);
-            return h('label',{key:opt, className:'ms-option'},
-              h('input',{type:'checkbox', checked:isChecked, onChange:()=>toggle(opt)}),
-              colorMap && h('span',{className:'ms-swatch', style:{background:colorMap[opt]||'#888'}}),
-              h('span',{className:'ms-label'}, opt)
-            );
-          })
+          filteredOptions.length === 0
+            ? h('div',{className:'ms-empty', style:{padding:'14px 10px', fontSize:12, color:'var(--ink-3)', textAlign:'center'}}, 'Sonuç yok')
+            : filteredOptions.map(opt => {
+                const isChecked = selected.length === 0 ? false : selected.includes(opt);
+                return h('label',{key:opt, className:'ms-option'},
+                  h('input',{type:'checkbox', checked:isChecked, onChange:()=>toggle(opt)}),
+                  colorMap && h('span',{className:'ms-swatch', style:{background:colorMap[opt]||'#888'}}),
+                  h('span',{className:'ms-label'}, opt)
+                );
+              })
         )
       )
     );
