@@ -301,6 +301,49 @@ Benzer bir genişletme her marka için yapılabilir (brand catalog info yoksa bu
 
 ---
 
+## 9.5 Drill-Down Kategori Pattern (Kat1 → Kat2 → Kat3)
+
+OutOfCatalog + Brand tab'larında **Kategori Pazar Payı** chart'ı global filter state'ine göre otomatik drill-down yapar:
+
+```js
+const gK1 = globalFilter?.globalK1 || [];
+const gK2 = globalFilter?.globalK2 || [];
+let level = 'k1';
+if (gK2.length >= 1) level = 'k3';
+else if (gK1.length >= 1) level = 'k2';
+// Group scopedKws by k[level], compute share, render ShareBars
+// onClickRow toggles corresponding globalKN array
+```
+
+Aynı mantık **Marka × Kategori Matris**'te de kullanılır — kolonlar Kat1, Kat1+ filtre seçilince Kat2'ye döner, Kat2+ seçilince Kat3 olur. Matris `minWidth` ve `maxHeight: 520` ile yatay+dikey scroll, ilk sütun `position:sticky; left:0; zIndex:1`.
+
+## 9.6 CopyButton Pattern
+
+Tüm tablo ve matrislere ekli küçük "📋 Kopyala" butonu. Clipboard'a TSV (tab-separated) yazar — Excel/Sheets'e yapıştırıldığında hücrelere düzgün oturur. Hiyerarşik tablolar (brand pivot'taki Kat 2 alt-satırlar gibi) `{indent: 1, cells: [...]}` formatıyla başa TAB karakteri eklenir.
+
+```js
+<CopyButton getData={() => ({
+  headers: ['#', 'Marka', 'KW', '2024 Avg', '2025 Avg', 'YoY %', ...],
+  rows: [
+    [1, 'Philips', 94, 84604, 76442, '-9.61%', ...],
+    {indent: 1, cells: ['', '↳ Küçük Ev Aletleri', 32, ...]},  // pivot alt-satır
+    ...
+  ]
+})} />
+```
+
+## 9.7 Monthly Avg Convention
+
+Brand/kategori aggregate'lerinde `sum25` yıllık toplam hacim tutulur (prep script'ten). UI'da her zaman **aylık ortalama** (`sum25/12`) gösterilir. Keyword bazında `a24/a25` zaten aylık avg.
+
+Helper: `toMonthlyAvg(v) = v / 12`. Görünen sayı `fmtNum(toMonthlyAvg(b.sum25))`, tooltip `fmtFull(toMonthlyAvg(b.sum25))`. Kolon başlıkları **"2024 Avg" / "2025 Avg"**.
+
+## 9.8 Smooth Scroll
+
+Tüm sayfa CSS'te `html { scroll-behavior: smooth }` ile global smooth scroll. `prefers-reduced-motion: reduce` kullanıcıları için otomatik kapatılır. Programatik scroll'larda `smoothScrollTo(el)` helper'ı `scrollIntoView({behavior:'smooth', block:'start'})` kullanır.
+
+Cross-tab nav ("Keyword tab'ında aç →"), brand matrix marka-click, expand/collapse hepsi smooth scroll'la çalışır.
+
 ## 10. Prensipler Özeti
 
 1. **Single source of truth**: Filter state app.jsx'te, `globalFilter` prop olarak dağıtılır
@@ -311,6 +354,10 @@ Benzer bir genişletme her marka için yapılabilir (brand catalog info yoksa bu
 6. **Filter layout**: Hepsi/Hiçbiri + search bar + MultiSelect patterni tutarlı, secondary filtreler ikinci satırda
 7. **Brand-agnostic core**: Marka-spesifik logic prep-*.js'e taşınır, template'e dokunmadan genişletilir
 8. **Dark mode**: `color-mix(... var(--bg-card))` kullanımı ile otomatik uyum
+9. **Monthly avg everywhere**: Brand/kategori aggregate'lerinde `sum25/12` göster, `toMonthlyAvg()` helper kullan, "2024 Avg" / "2025 Avg" label'ı
+10. **Drill-down via global state**: Kategori Pazar Payı + Marka × Kategori matrisi `globalK1/K2` durumuna göre otomatik Kat1→Kat2→Kat3 drill eder — ayrı bir state gerekmez
+11. **Copy to clipboard**: Her tablo/matrisin yanında `<CopyButton getData={() => ({headers, rows})} />`. TSV Excel/Sheets'e yapıştırılabilir; pivot alt-satırlar `{indent:1, cells:[...]}` ile işaretlenir
+12. **Smooth scroll**: `html { scroll-behavior: smooth }` + `smoothScrollTo(el)` helper, reduced-motion desteği
 
 ---
 

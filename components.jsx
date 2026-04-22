@@ -1065,5 +1065,78 @@ window.C = (function(){
     );
   }
 
-  return { Kpi, YoYPill, Sparkline, Heatmap, ShareBars, QStack, Modal, LineChart, BarChart, Donut, InfoIcon, Explainer, MultiSelect, SectionHeader, SmallMultiples, PolarPeak, EmptyState, Skeleton, ChartActions, BumpChart, StreamGraph, Zoomable };
+  // ======== CopyButton ========
+  // Küçük kopyala butonu — tabloyu TSV olarak clipboard'a yazar (Excel/Sheets'e yapıştırılabilir).
+  // Props:
+  //   getData: () => { headers: string[], rows: Array<Array<string|number>> }
+  //   title?: 'Kopyala' (default)
+  //   size?: 'sm' | 'md' (default 'sm')
+  // Note: `rows` içindeki sub-row'ları nested array ile işaretle: {indent: 1, cells: [...]} → satır başına TAB eklenir
+  function CopyButton({getData, title='Kopyala', size='sm'}) {
+    const [copied, setCopied] = React.useState(false);
+    const handle = async (e) => {
+      e.stopPropagation();
+      try {
+        const data = getData();
+        if (!data) return;
+        const lines = [];
+        // Headers
+        if (data.headers) lines.push(data.headers.join('\t'));
+        // Rows
+        if (data.rows) {
+          for (const row of data.rows) {
+            if (Array.isArray(row)) {
+              lines.push(row.map(cellToStr).join('\t'));
+            } else if (row && row.cells) {
+              const prefix = row.indent ? '\t'.repeat(row.indent) : '';
+              lines.push(prefix + row.cells.map(cellToStr).join('\t'));
+            }
+          }
+        }
+        const tsv = lines.join('\n');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(tsv);
+        } else {
+          // Fallback for insecure contexts: textarea + document.execCommand
+          const ta = document.createElement('textarea');
+          ta.value = tsv; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1400);
+      } catch (err) {
+        console.error('[CopyButton] copy failed:', err);
+      }
+    };
+    const cellToStr = (v) => {
+      if (v == null) return '';
+      if (typeof v === 'number') {
+        // Excel/Sheets TR locale: comma as decimal separator — but TSV should use period for numeric cells
+        // Keep as string with period so Excel parses as number regardless of locale
+        return Number.isInteger(v) ? String(v) : v.toFixed(4).replace(/\.?0+$/, '');
+      }
+      return String(v).replace(/\t/g,' ').replace(/\n/g,' ');
+    };
+    const btnSize = size === 'md' ? {padding:'6px 12px', fontSize:12} : {padding:'4px 9px', fontSize:11};
+    return h('button', {
+      className: 'copy-btn chip-btn' + (copied ? ' copied' : ''),
+      onClick: handle,
+      title: copied ? 'Kopyalandı!' : 'Tabloyu TSV olarak kopyala (Excel/Sheets\'e yapıştırılabilir)',
+      style: {
+        ...btnSize, borderRadius: 999, cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        background: copied ? 'color-mix(in srgb, var(--green, #059669) 16%, var(--bg-card))' : 'var(--bg-card)',
+        color: copied ? 'var(--green, #059669)' : 'var(--ink-2)',
+        border: '1px solid var(--line)',
+        fontWeight: 600,
+        transition: 'background .18s, color .18s, border-color .18s'
+      }
+    },
+      copied ? '✓ Kopyalandı' : (h('span', null, '📋 ', title))
+    );
+  }
+
+  return { Kpi, YoYPill, Sparkline, Heatmap, ShareBars, QStack, Modal, LineChart, BarChart, Donut, InfoIcon, Explainer, MultiSelect, SectionHeader, SmallMultiples, PolarPeak, EmptyState, Skeleton, ChartActions, BumpChart, StreamGraph, Zoomable, CopyButton };
 })();

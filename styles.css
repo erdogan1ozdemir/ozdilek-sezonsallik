@@ -1,4 +1,11 @@
 /* Seasonal Keyword Dashboard — brand-agnostic template */
+/* Global smooth scroll for all in-page navigation */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+/* Row hover background for clickable share rows */
+.share-row.clickable:hover { background: color-mix(in srgb, var(--coral) 6%, transparent) !important; }
 @font-face { font-family: 'Bricolage Grotesque'; src: url('fonts/BricolageGrotesque-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
 @font-face { font-family: 'Bricolage Grotesque'; src: url('fonts/BricolageGrotesque-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
 @font-face { font-family: 'Bricolage Grotesque'; src: url('fonts/BricolageGrotesque-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
