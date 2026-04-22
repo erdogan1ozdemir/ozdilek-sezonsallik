@@ -187,6 +187,16 @@
       setKeywordInitFilter(ctx || null);
       setTab('keyword');
     };
+    // Smart brand navigation: Var brands → Keyword tab (in-catalog list), Yok brands → OutOfCatalog tab
+    const onNavigateBrand = (brandName, catalog) => {
+      if (catalog === 'Yok') {
+        setGlobalBrand([brandName]);
+        setTab('out');
+      } else {
+        setGlobalBrand([brandName]);
+        setTab('keyword');
+      }
+    };
 
     const tabs = [
       { id:'ozet', label:'Özet', badge:null },
@@ -215,8 +225,8 @@
         case 'keyword': return h(KeywordTab, {setKeywordModal, initialFilter: keywordInitFilter, clearInitialFilter: () => setKeywordInitFilter(null), globalFilter});
         case 'trendler': return h(TrendlerTab, {setKeywordModal, onNavigateKw, globalFilter});
         case 'fiyat': return h(FiyatTab, {setKeywordModal, globalFilter});
-        case 'out': return h(OutOfCatalogTab, {setKeywordModal, onNavigateKw, globalFilter});
-        case 'brand': return h(BrandTab, {setKeywordModal, onNavigateKw, globalFilter});
+        case 'out': return h(OutOfCatalogTab, {setKeywordModal, onNavigateKw, onNavigateBrand, globalFilter});
+        case 'brand': return h(BrandTab, {setKeywordModal, onNavigateKw, onNavigateBrand, globalFilter});
       }
     }
 
@@ -380,8 +390,12 @@
         }, 'Filtre aktif · Tüm sekmeleri dinamik olarak etkiler')
       ),
 
-      // Content
-      h('div',{className:'content', 'data-screen-label': `01 ${tabs.find(t=>t.id===tab)?.label}`},
+      // Content — tab değişince fade-in animasyon (key=tab)
+      h('div',{
+        key: 'tab-' + tab,
+        className:'content tab-content-anim',
+        'data-screen-label': `01 ${tabs.find(t=>t.id===tab)?.label}`
+      },
         renderTab(tab)
       ),
 

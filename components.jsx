@@ -1076,38 +1076,48 @@ window.C = (function(){
     const [copied, setCopied] = React.useState(false);
     const handle = async (e) => {
       e.stopPropagation();
-      try {
-        const data = getData();
-        if (!data) return;
-        const lines = [];
-        // Headers
-        if (data.headers) lines.push(data.headers.join('\t'));
-        // Rows
-        if (data.rows) {
-          for (const row of data.rows) {
-            if (Array.isArray(row)) {
-              lines.push(row.map(cellToStr).join('\t'));
-            } else if (row && row.cells) {
-              const prefix = row.indent ? '\t'.repeat(row.indent) : '';
-              lines.push(prefix + row.cells.map(cellToStr).join('\t'));
-            }
+      const data = getData();
+      if (!data) return;
+      const lines = [];
+      if (data.headers) lines.push(data.headers.join('\t'));
+      if (data.rows) {
+        for (const row of data.rows) {
+          if (Array.isArray(row)) {
+            lines.push(row.map(cellToStr).join('\t'));
+          } else if (row && row.cells) {
+            const prefix = row.indent ? '\t'.repeat(row.indent) : '';
+            lines.push(prefix + row.cells.map(cellToStr).join('\t'));
           }
         }
-        const tsv = lines.join('\n');
-        if (navigator.clipboard && navigator.clipboard.writeText) {
+      }
+      const tsv = lines.join('\n');
+      // Try modern Clipboard API — if fails (headless, not focused, or not available), use fallback
+      const useFallback = () => {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = tsv;
+          ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0';
+          ta.style.opacity = '0'; ta.style.pointerEvents = 'none';
+          document.body.appendChild(ta);
+          ta.focus(); ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return ok;
+        } catch { return false; }
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText && document.hasFocus()) {
           await navigator.clipboard.writeText(tsv);
         } else {
-          // Fallback for insecure contexts: textarea + document.execCommand
-          const ta = document.createElement('textarea');
-          ta.value = tsv; ta.style.position = 'fixed'; ta.style.opacity = '0';
-          document.body.appendChild(ta); ta.select();
-          document.execCommand('copy');
-          document.body.removeChild(ta);
+          useFallback();
         }
         setCopied(true);
         setTimeout(() => setCopied(false), 1400);
-      } catch (err) {
-        console.error('[CopyButton] copy failed:', err);
+      } catch {
+        if (useFallback()) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        }
       }
     };
     const cellToStr = (v) => {

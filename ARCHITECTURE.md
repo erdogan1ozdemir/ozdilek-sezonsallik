@@ -344,6 +344,39 @@ Tüm sayfa CSS'te `html { scroll-behavior: smooth }` ile global smooth scroll. `
 
 Cross-tab nav ("Keyword tab'ında aç →"), brand matrix marka-click, expand/collapse hepsi smooth scroll'la çalışır.
 
+## 9.9 Cross-Tab Brand Navigation
+
+Brand bazlı gezinmede `catalog` flag'ine göre doğru tab'a route edilir:
+
+```js
+// app.jsx
+const onNavigateBrand = (brandName, catalog) => {
+  setGlobalBrand([brandName]);
+  setTab(catalog === 'Yok' ? 'out' : 'keyword');
+};
+```
+
+- **Var** markası (Özdilek portföyünde): Keyword tab'ına git — D.keywords'te mevcut
+- **Yok** markası (portföy dışı): OutOfCatalog tab'ına git — D.outKeywords'te mevcut
+
+Butonlar context-aware: "Keyword tab'ında aç →" vs "Özdilekte Olmayan Markalar tab'ında aç →" metinleri.
+
+## 9.10 Tab Transition Animation
+
+Tab değişince content alanı fade + slight translate ile girer:
+
+```css
+@keyframes tab-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tab-content-anim { animation: tab-fade-in .28s cubic-bezier(.2, .8, .2, 1); }
+```
+
+React'te `key={'tab-'+tab}` kullanılarak tab değişiminde DOM sıfırlanır ve animasyon yeniden tetiklenir.
+
+`prefers-reduced-motion: reduce` kullanıcıları için animasyon devre dışıdır.
+
 ## 10. Prensipler Özeti
 
 1. **Single source of truth**: Filter state app.jsx'te, `globalFilter` prop olarak dağıtılır

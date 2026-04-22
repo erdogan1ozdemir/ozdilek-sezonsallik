@@ -1357,10 +1357,21 @@ window.TABS = (function(){
     }, label, sort.k===k ? (sort.d>0?' ↑':' ↓') : '');
 
     return h('div',null,
-      // Sadece keyword arama + CSV export — diğer filtreler üst globalde
+      // Sadece keyword arama + CopyButton + CSV export — diğer filtreler üst globalde
       h('div',{className:'toolbar'},
         h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:200}}),
         h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
+        h(CopyButton, {
+          getData: () => ({
+            headers: ['Keyword','Marka','Kat 1','Kat 2','Kat 3','2024 Avg','2025 Avg','YoY %','Bucket','Peak Ay','Peak Çeyrek'],
+            rows: filtered.map(r => [
+              r.kw, r.brand||'', r.k1, r.k2, r.k3,
+              r.a24, r.a25, (r.yoy*100).toFixed(2)+'%', r.bucket||'',
+              r.m25 ? TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))] : '',
+              r.m25 ? 'Q'+(Math.floor(r.m25.indexOf(Math.max(...r.m25))/3)+1) : ''
+            ])
+          })
+        }),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
             {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
@@ -1829,9 +1840,21 @@ window.TABS = (function(){
       ),
       h('div',{className:'grid grid-main', style:{marginBottom:18}},
         h('div',{className:'card flush'},
-          h('div',{className:'card-title-row'}, h('h3',null,'Fiyat Intent Keywordleri',
-            h(InfoIcon,null,h('strong',null,'Ne? '),'İçinde fiyat/ne kadar/ucuz/maliyet geçen kelimeler. Bu tür kelimeler direkt satın alma niyeti gösterir - organik sıralama burada dönüşüme en yakın olanıdır.')
-          )),
+          h('div',{className:'card-title-row', style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
+            h('h3',{style:{flex:1}}, 'Fiyat Intent Keywordleri',
+              h(InfoIcon,null,h('strong',null,'Ne? '),'İçinde fiyat/ne kadar/ucuz/maliyet geçen kelimeler. Bu tür kelimeler direkt satın alma niyeti gösterir - organik sıralama burada dönüşüme en yakın olanıdır.')
+            ),
+            h(CopyButton, {
+              getData: () => ({
+                headers: ['Keyword','Marka','Kat 1','Kat 2','2024 Avg','2025 Avg','YoY %','Peak Ay'],
+                rows: sorted.map(r => {
+                  const full = kwByKw.get(r.kw) || {};
+                  const mi = serialToMonthIdx(r.peakMonth);
+                  return [r.kw, full.brand||'', r.k1, r.k2, r.a24, r.a25, (r.yoy*100).toFixed(2)+'%', mi!=null ? TR_MONTHS[mi] : ''];
+                })
+              })
+            })
+          ),
           h('div',{className:'tbl-wrap'},
             h('table',{className:'tbl'},
               h('thead',null,
@@ -1878,7 +1901,7 @@ window.TABS = (function(){
   }
 
   // === Out-of-Catalog Tab — Özdilekte Olmayan Markalar ===
-  function OutOfCatalogTab({setKeywordModal, onNavigateKw, globalFilter}) {
+  function OutOfCatalogTab({setKeywordModal, onNavigateKw, onNavigateBrand, globalFilter}) {
     const OUT = D.outKeywords || [];
 
     const [q, setQ] = React.useState('');
@@ -2174,7 +2197,7 @@ window.TABS = (function(){
                     }, (b.yoy > 0 ? '↑ +' : '↓ ') + fmtPct(b.yoy, 0).replace(/[+-]/,''))
                   ),
                   h('div',{style:{display:'flex',alignItems:'center',gap:10,fontSize:11,color:'var(--ink-3)', flexWrap:'wrap'}},
-                    h('span',null, fmtNum(b.sum25), ' / 2025'),
+                    h('span',{title: fmtFull(toMonthlyAvg(b.sum25)) + ' /ay'}, fmtNum(toMonthlyAvg(b.sum25)), ' /ay 2025'),
                     h('span',{style:{width:3,height:3,borderRadius:'50%',background:'var(--ink-3)',opacity:.5}}),
                     h('span',null, b.count, ' KW'),
                     h('span',{style:{width:3,height:3,borderRadius:'50%',background:'var(--ink-3)',opacity:.5}}),
@@ -2243,8 +2266,8 @@ window.TABS = (function(){
               const csv = toCSV(brandRows, [
                 {label:'Marka',key:'brand'},
                 {label:'KW Sayısı',key:'count'},
-                {label:'2024 Hacim',key:'sum24'},
-                {label:'2025 Hacim',key:'sum25'},
+                {label:'2024 Avg', get:r=>toMonthlyAvg(r.sum24)},
+                {label:'2025 Avg', get:r=>toMonthlyAvg(r.sum25)},
                 {label:'YoY',key:'yoy'},
                 {label:'Peak Ay', get:r => r.peakI >= 0 ? TR_MONTHS[r.peakI] : ''},
                 {label:'Ana Kategori',key:'topK1'},
@@ -2261,8 +2284,8 @@ window.TABS = (function(){
               h('th',null,'#'),
               bth('Marka','brand'),
               bth('KW','count',true),
-              bth('2024 Hacim','sum24',true),
-              bth('2025 Hacim','sum25',true),
+              bth('2024 Avg','sum24',true),
+              bth('2025 Avg','sum25',true),
               bth('YoY','yoy',true),
               h('th',null,'12 Ay'),
               bth('Peak Ay','peakI'),
@@ -2278,8 +2301,8 @@ window.TABS = (function(){
                   h('td',{style:{width:40, color:'var(--ink-3)', fontSize:11}}, brandPage*brandsPerPage + i + 1),
                   h('td',null, h('strong',null, b.brand)),
                   h('td',{className:'num'}, fmtNum(b.count)),
-                  h('td',{className:'num'}, fmtNum(b.sum24)),
-                  h('td',{className:'num'}, fmtNum(b.sum25)),
+                  h('td',{className:'num', title:fmtFull(toMonthlyAvg(b.sum24))}, fmtNum(toMonthlyAvg(b.sum24))),
+                  h('td',{className:'num', title:fmtFull(toMonthlyAvg(b.sum25))}, fmtNum(toMonthlyAvg(b.sum25))),
                   h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
                   h('td',{style:{width:130}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:6}},
@@ -2310,15 +2333,15 @@ window.TABS = (function(){
                         h('div',{style:{fontSize:11, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
                           `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
                         ),
-                        onNavigateKw && globalFilter && h('button',{
+                        onNavigateBrand && h('button',{
                           className:'chip-btn',
                           style:{padding:'4px 10px', borderRadius:999, fontSize:11, cursor:'pointer'},
                           onClick: (e) => {
                             e.stopPropagation();
-                            if (globalFilter.setGlobalBrand) globalFilter.setGlobalBrand([b.brand]);
-                            onNavigateKw({});  // navigate to Keyword tab
-                          }
-                        }, 'Keyword tab\'ında aç →')
+                            onNavigateBrand(b.brand, b.catalog);
+                          },
+                          title: b.catalog === 'Yok' ? 'Özdilekte Olmayan Markalar tab\'ında aç' : 'Keyword tab\'ında aç'
+                        }, (b.catalog === 'Yok' ? 'Özdilekte Olmayan Markalar tab\'ında aç →' : 'Keyword tab\'ında aç →'))
                       ),
                       h('table',{className:'tbl', style:{background:'var(--bg-card)', marginBottom:0}},
                         h('thead',null, h('tr',null,
@@ -2372,6 +2395,16 @@ window.TABS = (function(){
       h('div',{className:'toolbar'},
         h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:200}}),
         h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
+        h(CopyButton, {
+          getData: () => ({
+            headers: ['Keyword','Marka','Kat 1','Kat 2','Kat 3','2024 Avg','2025 Avg','YoY %','Peak Ay'],
+            rows: filtered.map(r => [
+              r.kw, r.brand||'', r.k1, r.k2, r.k3,
+              r.a24, r.a25, (r.yoy*100).toFixed(2)+'%',
+              r.m25 ? TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))] : ''
+            ])
+          })
+        }),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
             {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
@@ -2430,16 +2463,19 @@ window.TABS = (function(){
   }
 
   // === Brand Tab ===
-  function BrandTab({setKeywordModal, onNavigateKw, globalFilter}) {
+  function BrandTab({setKeywordModal, onNavigateKw, onNavigateBrand, globalFilter}) {
     const [q, setQ] = React.useState('');
     const [catFilter, setCatFilter] = React.useState('');  // '' | 'Var' | 'Yok'
     const [sort, setSort] = React.useState({k:'sum25', d:-1});
     const [expandedBrands, setExpandedBrands] = React.useState(() => new Set());
     const [page, setPage] = React.useState(0);
-    const [topPage, setTopPage] = React.useState(0);
     const perPage = 50;
 
-    React.useEffect(() => setTopPage(0), [catFilter, globalFilter]);
+    // Brand-tab keyword list (alttaki tablo)
+    const [brandKwQuery, setBrandKwQuery] = React.useState('');
+    const [brandKwPage, setBrandKwPage] = React.useState(0);
+    const [brandKwSort, setBrandKwSort] = React.useState({k:'a25', d:-1});
+    React.useEffect(() => setBrandKwPage(0), [brandKwQuery, brandKwSort, catFilter, globalFilter]);
 
     const toggleExpand = (b) => {
       setExpandedBrands(prev => {
@@ -2578,7 +2614,7 @@ window.TABS = (function(){
           const csv = toCSV(filtered, [
             {label:'Marka',key:'brand'}, {label:'Katalog',key:'catalog'},
             {label:'KW Sayısı',key:'count'},
-            {label:'2024 Hacim',key:'sum24'}, {label:'2025 Hacim',key:'sum25'}, {label:'YoY',key:'yoy'},
+            {label:'2024 Avg', get:r=>toMonthlyAvg(r.sum24)}, {label:'2025 Avg', get:r=>toMonthlyAvg(r.sum25)}, {label:'YoY',key:'yoy'},
             {label:'Peak Ay', get:r => r.peakI >= 0 ? TR_MONTHS[r.peakI] : ''},
             {label:'Ana Kategori',key:'topK1'},
             ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25 ? r.m25[i] : ''}))
@@ -2640,85 +2676,111 @@ window.TABS = (function(){
         );
       })(),
 
-      // === Top Markalar (paginated 2024 vs 2025 paired bars) ===
+      // === Keyword Tablosu (Brand tab'ın alt kısmında filtrelenebilir keyword listesi) ===
       (() => {
-        const catFiltered = catFilter ? allBrands.filter(b => b.catalog === catFilter) : allBrands;
-        const sortedBrands = [...catFiltered].sort((a,b) => b.sum25 - a.sum25);
-        if (sortedBrands.length === 0) return null;
-        const perPage = 10;
-        const pageRows = sortedBrands.slice(topPage*perPage, (topPage+1)*perPage);
-        const topTotalPages = Math.ceil(sortedBrands.length/perPage);
-        const pageMax = pageRows.length ? Math.max(...pageRows.map(b => Math.max(b.sum24, b.sum25))) : 1;
-        return h('div',{className:'card', style:{marginBottom:18}},
-          h('div',{className:'card-header', style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
-            h('h3',{style:{flex:1,minWidth:160}}, 'Top Markalar',
-              catFilter && h('span',{className:'txt-3', style:{fontSize:12,marginLeft:8}}, '(' + (catFilter === 'Var' ? 'Özdilekte Var' : 'Özdilekte Yok') + ')'),
+        // Scoped keywords + catFilter (Var/Yok) uygulanır
+        const poolKws = catFilter ? scopedKws.filter(k => k.catalog === catFilter) : scopedKws;
+        const qq = brandKwQuery.trim().toLowerCase();
+        let rows = poolKws;
+        if (qq) rows = rows.filter(r => r.kw.toLowerCase().includes(qq) || (r.brand||'').toLowerCase().includes(qq));
+        // Sort
+        const sk = brandKwSort.k, sd = brandKwSort.d;
+        rows = [...rows].sort((a,b) => {
+          const av = a[sk], bv = b[sk];
+          if (av == null) return 1; if (bv == null) return -1;
+          if (typeof av === 'string') return (av||'').localeCompare(bv||'', 'tr') * sd;
+          return (av > bv ? 1 : av < bv ? -1 : 0) * sd;
+        });
+        const perK = 50;
+        const kwPageRows = rows.slice(brandKwPage*perK, (brandKwPage+1)*perK);
+        const kwTotalPages = Math.ceil(rows.length/perK);
+        const tth = (label, k, numCol=false) => h('th', {
+          className:numCol?'num':'',
+          style:{cursor:'pointer', userSelect:'none'},
+          onClick:()=>setBrandKwSort({k, d: brandKwSort.k===k ? -brandKwSort.d : -1})
+        }, label, brandKwSort.k===k ? (brandKwSort.d>0?' ↑':' ↓') : '');
+        const copyData = () => ({
+          headers: ['Keyword', 'Marka', 'Katalog', 'Kat 1', 'Kat 2', 'Kat 3', '2024 Avg', '2025 Avg', 'YoY %', 'Peak Ay', 'Peak Çeyrek'],
+          rows: rows.map(r => [
+            r.kw, r.brand || '', r.catalog || '', r.k1, r.k2, r.k3,
+            r.a24, r.a25, (r.yoy*100).toFixed(2)+'%',
+            r.m25 ? TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))] : '',
+            r.m25 ? 'Q'+(Math.floor(r.m25.indexOf(Math.max(...r.m25))/3)+1) : ''
+          ])
+        });
+        return h('div',{className:'card flush', style:{marginBottom:18}},
+          h('div',{className:'card-title-row', style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
+            h('h3',{style:{flex:1,minWidth:200}}, 'Keyword Listesi · Marka Filtreli',
               h(InfoIcon,null,
-                h('strong',null,'Ne gösterir? '),'Markaların 2024 (gri) ve 2025 (kategori rengi) aylık ortalama arama hacmi, yan yana barlar ile. Her marka satırında YoY pill, son 3 ay momentum oku ve kopyalama ikonu.',
-                h('br'),h('br'),h('strong',null,'Sayfalama: '),'10 marka/sayfa. Her sayfadaki bar ölçeği o sayfadaki en büyük değere göre normalize edilir.'
+                h('strong',null,'Ne gösterir? '),'Markaları, kategorileri, brand filtreleriyle daraltabildiğiniz, seçili scope\'daki tüm keyword\'lerin tek-tablo görünümü.',
+                h('br'),h('br'),h('strong',null,'Filtre: '),'Üstte global (Kat 1/2/3/Marka/Peak Ay/Trend...) + toolbar\'da tab-level arama + katalog segmented.',
+                h('br'),h('br'),h('strong',null,'Sort: '),'Kolon başlıklarına tıkla. Satır tıkla → keyword modal.'
+              ),
+              h('span',{className:'txt-3', style:{fontSize:11, marginLeft:8}}, fmtNum(rows.length)+' keyword')
+            ),
+            h('input',{
+              className:'input input-search', placeholder:'Keyword veya marka ara…',
+              value:brandKwQuery, onChange:e=>setBrandKwQuery(e.target.value),
+              style:{width:240}
+            }),
+            h(CopyButton, {getData: copyData}),
+            h('button',{
+              className:'chip-btn', style:{padding:'6px 12px',borderRadius:999},
+              onClick:()=>{
+                const csv = toCSV(rows, [
+                  {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Katalog',key:'catalog'},
+                  {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
+                  {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'},
+                  {label:'Peak Ay', get:r => r.m25 ? TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))] : ''},
+                  ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
+                ]);
+                downloadCSV(`${BRAND_SLUG}-brand-keywords.csv`, csv);
+              }
+            }, '↓ CSV')
+          ),
+          h('div',{className:'tbl-wrap'},
+            h('table',{className:'tbl'},
+              h('thead',null, h('tr',null,
+                tth('Keyword','kw'),
+                tth('Marka','brand'),
+                h('th',null,'Katalog'),
+                tth('Kat 1','k1'),
+                tth('Kat 2','k2'),
+                tth('2024 Avg','a24',true),
+                tth('2025 Avg','a25',true),
+                tth('YoY','yoy',true),
+                h('th',null,'12 Ay'),
+                h('th',null,'Peak')
+              )),
+              h('tbody',null,
+                kwPageRows.length === 0 && h('tr',null, h('td',{colSpan:10, className:'empty'}, 'Filtreye uyan keyword yok')),
+                kwPageRows.map((r,i) => {
+                  const pi = r.m25 ? r.m25.indexOf(Math.max(...r.m25)) : -1;
+                  return h('tr',{key:brandKwPage*perK+i, className:'clickable', onClick:()=>setKeywordModal(r)},
+                    h('td',{className:'kw-cell', style:{maxWidth:200}}, r.kw),
+                    h('td',{style:{fontSize:11, fontWeight:500}}, r.brand || '-'),
+                    h('td',null, h('span',{className:'pill '+(r.catalog==='Var'?'pos':r.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, r.catalog || '-')),
+                    h('td',{style:{fontSize:11}},
+                      h('div',{style:{display:'flex',alignItems:'center',gap:5}},
+                        h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(r.k1),flexShrink:0}}),
+                        h('span',null, r.k1)
+                      )
+                    ),
+                    h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
+                    h('td',{className:'num', title:fmtFull(r.a24)}, fmtNum(r.a24)),
+                    h('td',{className:'num', title:fmtFull(r.a25)}, fmtNum(r.a25)),
+                    h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
+                    h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
+                    h('td',null, pi>=0 ? h('span',{className:'pill neu'}, TR_MONTHS[pi]) : '-')
+                  );
+                })
               )
-            ),
-            h('div',{style:{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'var(--ink-3)'}},
-              h('span',{style:{display:'inline-block',width:10,height:10,borderRadius:2,background:'color-mix(in srgb, var(--ink-3) 45%, transparent)'}}),
-              '2024 Avg',
-              h('span',{style:{display:'inline-block',width:10,height:10,borderRadius:2,background:'var(--coral)', marginLeft:8}}),
-              '2025 Avg',
-              h('span',{style:{marginLeft:10, fontSize:11, color:'var(--ink-3)'}}, `${sortedBrands.length} marka`)
-            ),
-            h(CopyButton, {
-              getData: () => ({
-                headers: ['#', 'Marka', 'Katalog', 'KW', '2024 Avg', '2025 Avg', 'YoY %', 'Peak Ay', 'Ana Kategori'],
-                rows: sortedBrands.map((b,i) => [i+1, b.brand, b.catalog, b.count, toMonthlyAvg(b.sum24), toMonthlyAvg(b.sum25), (b.yoy*100).toFixed(2)+'%', b.peakI>=0?TR_MONTHS[b.peakI]:'', b.topK1])
-              })
-            })
+            )
           ),
-          h('div',{style:{display:'flex',flexDirection:'column',gap:10,padding:14}},
-            pageRows.map((b,i) => {
-              const avg24 = b.sum24 / 12;
-              const avg25 = b.sum25 / 12;
-              const pct24 = pageMax ? (b.sum24 / pageMax * 100) : 0;
-              const pct25 = pageMax ? (b.sum25 / pageMax * 100) : 0;
-              const color25 = b.catalog === 'Var' ? '#59A14F' : b.catalog === 'Yok' ? '#E15759' : '#B07AA1';
-              const arr = recentTrendArrow(b.m25);
-              const rank = topPage*perPage + i + 1;
-              return h('div',{
-                key:i, className:'clickable',
-                onClick:()=>toggleExpand(b.brand),
-                style:{cursor:'pointer', padding:'6px 0', borderRadius:6}
-              },
-                h('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:5,fontSize:12,flexWrap:'wrap'}},
-                  h('span',{style:{color:'var(--ink-3)',fontSize:11,fontWeight:600,minWidth:22}}, rank+'.'),
-                  h('strong',{style:{flex:1,minWidth:120}}, b.brand),
-                  h('span',{className:'pill '+(b.catalog==='Var'?'pos':b.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, b.catalog || '-'),
-                  h('span',{className:'txt-3', style:{fontSize:11}}, b.count, ' KW'),
-                  h('span',{className:'num', style:{fontWeight:600, fontSize:12}, title:fmtFull(avg25)}, fmtNum(avg25) + ' /ay'),
-                  h(YoYPill,{yoy:b.yoy}),
-                  arr && h('span',{title:arr.title, style:{fontSize:13, fontWeight:700, color:arr.color}}, arr.char)
-                ),
-                // Paired bars: 2024 grey on top, 2025 colored below
-                h('div',{style:{display:'flex',flexDirection:'column',gap:2}},
-                  h('div',{style:{display:'flex',alignItems:'center',gap:8, fontSize:9, color:'var(--ink-3)'}},
-                    h('span',{style:{minWidth:34}}, '2024'),
-                    h('div',{style:{flex:1, height:7, background:'var(--line)', borderRadius:3, overflow:'hidden'}},
-                      h('div',{style:{height:'100%', width:pct24+'%', background:'color-mix(in srgb, var(--ink-3) 50%, transparent)', borderRadius:3}})
-                    ),
-                    h('span',{className:'num', style:{minWidth:50, textAlign:'right'}}, fmtNum(avg24))
-                  ),
-                  h('div',{style:{display:'flex',alignItems:'center',gap:8, fontSize:9, color:'var(--ink-3)'}},
-                    h('span',{style:{minWidth:34, fontWeight:700, color:color25}}, '2025'),
-                    h('div',{style:{flex:1, height:10, background:'var(--line)', borderRadius:3, overflow:'hidden'}},
-                      h('div',{style:{height:'100%', width:pct25+'%', background:color25, borderRadius:3}})
-                    ),
-                    h('span',{className:'num', style:{minWidth:50, textAlign:'right', fontWeight:600, color:'var(--ink)'}}, fmtNum(avg25))
-                  )
-                )
-              );
-            })
-          ),
-          topTotalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:10,borderTop:'1px solid var(--line)'}},
-            h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:topPage===0, onClick:()=>setTopPage(p=>Math.max(0,p-1))}, '← Önceki'),
-            h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${topPage+1}/${topTotalPages} · ${fmtNum(sortedBrands.length)} marka`),
-            h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:topPage>=topTotalPages-1, onClick:()=>setTopPage(p=>Math.min(topTotalPages-1, p+1))}, 'Sonraki →')
+          kwTotalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
+            h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:brandKwPage===0, onClick:()=>setBrandKwPage(p=>Math.max(0,p-1))}, '← Önceki'),
+            h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${brandKwPage+1}/${kwTotalPages} · ${fmtNum(rows.length)} KW`),
+            h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:brandKwPage>=kwTotalPages-1, onClick:()=>setBrandKwPage(p=>Math.min(kwTotalPages-1, p+1))}, 'Sonraki →')
           )
         );
       })(),
@@ -2911,15 +2973,15 @@ window.TABS = (function(){
                         h('div',{style:{fontSize:11, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
                           `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
                         ),
-                        onNavigateKw && globalFilter && h('button',{
+                        onNavigateBrand && h('button',{
                           className:'chip-btn',
                           style:{padding:'4px 10px', borderRadius:999, fontSize:11, cursor:'pointer'},
                           onClick: (e) => {
                             e.stopPropagation();
-                            if (globalFilter.setGlobalBrand) globalFilter.setGlobalBrand([b.brand]);
-                            onNavigateKw({});  // navigate to Keyword tab
-                          }
-                        }, 'Keyword tab\'ında aç →')
+                            onNavigateBrand(b.brand, b.catalog);
+                          },
+                          title: b.catalog === 'Yok' ? 'Özdilekte Olmayan Markalar tab\'ında aç' : 'Keyword tab\'ında aç'
+                        }, (b.catalog === 'Yok' ? 'Özdilekte Olmayan Markalar tab\'ında aç →' : 'Keyword tab\'ında aç →'))
                       ),
                       h('table',{className:'tbl', style:{background:'var(--bg-card)', marginBottom:0}},
                         h('thead',null, h('tr',null,

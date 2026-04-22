@@ -3,9 +3,22 @@
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+  .tab-content-anim { animation: none !important; }
 }
 /* Row hover background for clickable share rows */
 .share-row.clickable:hover { background: color-mix(in srgb, var(--coral) 6%, transparent) !important; }
+
+/* Tab transition — fade + slight translate when content changes */
+@keyframes tab-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tab-content-anim { animation: tab-fade-in .28s cubic-bezier(.2, .8, .2, 1); }
+
+/* Smooth transition on common interactive elements */
+button, .chip-btn, .tab, .multiselect-trigger, .ms-option, .share-row, .clickable {
+  transition: background .18s ease-out, color .18s ease-out, border-color .18s ease-out, transform .15s ease-out, box-shadow .18s ease-out;
+}
 @font-face { font-family: 'Bricolage Grotesque'; src: url('fonts/BricolageGrotesque-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
 @font-face { font-family: 'Bricolage Grotesque'; src: url('fonts/BricolageGrotesque-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
 @font-face { font-family: 'Bricolage Grotesque'; src: url('fonts/BricolageGrotesque-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
