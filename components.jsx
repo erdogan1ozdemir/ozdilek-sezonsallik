@@ -197,7 +197,7 @@ window.C = (function(){
             h('span',{style:{fontWeight:600}}, r.label),
             r.share != null && h('span',{className:'txt-3', style:{marginLeft:6}}, ' ' + (r.share*100).toFixed(1).replace('.',',')+'%')
           ),
-          h('div',{className:'num', style:{fontWeight:600}}, fmtFull(r.value),
+          h('div',{className:'num', style:{fontWeight:600}, title: fmtFull(r.value)}, fmtNum(r.value),
             r.yoy != null && h('span',{style:{marginLeft:8}}, h(YoYPill,{yoy:r.yoy}))
           )
         ),

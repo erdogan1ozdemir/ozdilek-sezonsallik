@@ -264,11 +264,7 @@
                 h('circle',{cx:12, cy:12, r:1.5, fill:'currentColor'})
               )
             ),
-            h('strong',null,'Kategori & Marka Filtresi'),
-            hasGlobalFilter
-              ? h('span',{className:'txt-3', style:{fontSize:11, marginLeft:8}},
-                  'Filtre aktif · Özet + Özdilekte Olmayan Markalar + Brand sekmelerini etkiler')
-              : null
+            h('strong',null,'Kategori & Marka Filtresi')
           ),
           h(window.C.MultiSelect, {
             label: 'Kat 1',
@@ -315,13 +311,17 @@
             onClick:()=>{ setGlobalK1([]); setGlobalK2([]); setGlobalK3([]); setGlobalBrand([]); }
           }, '× Temizle')
         ),
-        hasGlobalFilter && h('div',{className:'filter-chips', style:{marginBottom:10}},
+        hasGlobalFilter && h('div',{className:'filter-chips', style:{marginBottom:6}},
           h('span',{className:'lbl'}, 'Seçili:'),
           globalK1.map(k => h('button',{key:'1'+k, className:'filter-chip', onClick:()=>setGlobalK1(globalK1.filter(x=>x!==k))}, 'K1: '+k, h('span',{className:'x'},'×'))),
           globalK2.map(k => h('button',{key:'2'+k, className:'filter-chip', onClick:()=>setGlobalK2(globalK2.filter(x=>x!==k))}, 'K2: '+k, h('span',{className:'x'},'×'))),
           globalK3.map(k => h('button',{key:'3'+k, className:'filter-chip', onClick:()=>setGlobalK3(globalK3.filter(x=>x!==k))}, 'K3: '+k, h('span',{className:'x'},'×'))),
           globalBrand.map(b => h('button',{key:'b'+b, className:'filter-chip', onClick:()=>setGlobalBrand(globalBrand.filter(x=>x!==b))}, 'Marka: '+b, h('span',{className:'x'},'×')))
-        )
+        ),
+        hasGlobalFilter && h('div',{
+          className:'txt-3',
+          style:{fontSize:10.5, marginBottom:10, paddingLeft:2, letterSpacing:'.02em', opacity:.75}
+        }, 'Filtre aktif · Özet + Trendler + Özdilekte Olmayan Markalar + Brand sekmelerini etkiler')
       ),
 
       // Content
