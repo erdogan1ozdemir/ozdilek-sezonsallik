@@ -1121,11 +1121,11 @@ window.TABS = (function(){
 
   // === Keyword Tab ===
   function KeywordTab({setKeywordModal, initialFilter, clearInitialFilter, globalFilter}) {
+    // Raw arrays (stable refs for deps). Sets are built inside memos to avoid fresh-ref invalidation.
+    const gK1 = globalFilter?.globalK1 || [];
+    const gK2 = globalFilter?.globalK2 || [];
+    const gK3 = globalFilter?.globalK3 || [];
     const gBrand = globalFilter?.globalBrand || [];
-    const gBrandSet = gBrand.length ? new Set(gBrand) : null;
-    const gK1Set = (globalFilter?.globalK1 || []).length ? new Set(globalFilter.globalK1) : null;
-    const gK2Set = (globalFilter?.globalK2 || []).length ? new Set(globalFilter.globalK2) : null;
-    const gK3Set = (globalFilter?.globalK3 || []).length ? new Set(globalFilter.globalK3) : null;
 
     const [q, setQ] = React.useState('');
     const [k1, setK1] = React.useState(initialFilter?.k1 || '');
@@ -1157,6 +1157,11 @@ window.TABS = (function(){
     React.useEffect(() => { if (k3 && !k3Options.includes(k3)) setK3(''); }, [k1, k2]);
 
     const filtered = React.useMemo(() => {
+      // Build sets inside memo so deps can be stable raw arrays
+      const gK1Set = gK1.length ? new Set(gK1) : null;
+      const gK2Set = gK2.length ? new Set(gK2) : null;
+      const gK3Set = gK3.length ? new Set(gK3) : null;
+      const gBrandSet = gBrand.length ? new Set(gBrand) : null;
       let rows = D.keywords;
       // Global filter (scope): Kat 1/2/3 + Marka
       if (gK1Set) rows = rows.filter(r => gK1Set.has(r.k1));
@@ -1191,9 +1196,9 @@ window.TABS = (function(){
         return (av > bv ? 1 : av < bv ? -1 : 0) * d;
       });
       return rows;
-    }, [q, k1, k2, k3, bucket, sort, peakMonth, peakQuarter, trendFilter]);
+    }, [q, k1, k2, k3, bucket, sort, peakMonth, peakQuarter, trendFilter, gK1, gK2, gK3, gBrand]);
 
-    React.useEffect(() => setPage(0), [q, k1, k2, k3, bucket, peakMonth, peakQuarter, trendFilter, gK1Set, gK2Set, gK3Set, gBrandSet]);
+    React.useEffect(() => setPage(0), [q, k1, k2, k3, bucket, peakMonth, peakQuarter, trendFilter, gK1, gK2, gK3, gBrand]);
     const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
     const totalPages = Math.ceil(filtered.length/perPage);
     const buckets = [...new Set(D.keywords.map(k=>k.bucket))].filter(Boolean);
@@ -1437,14 +1442,16 @@ window.TABS = (function(){
       return out;
     }, [filteredKws]);
 
-    // Category-level trend distribution
+    // Category-level trend distribution (respects global filter via filteredKws)
     const perCat = React.useMemo(() => {
       let cats;
       if (trendCatLevel === 'kat1') {
-        cats = D.kat1Summary.map(k => ({label:k.k1, k1:k.k1, sub:null}));
+        const uniq = new Map();
+        for (const k of filteredKws) uniq.set(k.k1, {label:k.k1, k1:k.k1, sub:null});
+        cats = [...uniq.values()];
       } else if (trendCatLevel === 'kat2') {
         const uniq = new Map();
-        for (const k of D.keywords) {
+        for (const k of filteredKws) {
           const key = k.k1+'>'+k.k2;
           if (!trendCatFilter.k1 || k.k1 === trendCatFilter.k1) {
             uniq.set(key, {label:k.k2, k1:k.k1, k2:k.k2, sub:k.k1});
@@ -1453,7 +1460,7 @@ window.TABS = (function(){
         cats = [...uniq.values()];
       } else {
         const uniq = new Map();
-        for (const k of D.keywords) {
+        for (const k of filteredKws) {
           const key = k.k1+'>'+k.k2+'>'+k.k3;
           if ((!trendCatFilter.k1 || k.k1 === trendCatFilter.k1) && (!trendCatFilter.k2 || k.k2 === trendCatFilter.k2)) {
             uniq.set(key, {label:k.k3, k1:k.k1, k2:k.k2, k3:k.k3, sub:`${k.k1} > ${k.k2}`});
@@ -1462,7 +1469,7 @@ window.TABS = (function(){
         cats = [...uniq.values()];
       }
       return cats.map(c => {
-        const items = D.keywords.filter(x =>
+        const items = filteredKws.filter(x =>
           x.k1 === c.k1 &&
           (!c.k2 || x.k2 === c.k2) &&
           (!c.k3 || x.k3 === c.k3)
@@ -1475,7 +1482,7 @@ window.TABS = (function(){
         const yoy = totVol24 ? (totVol-totVol24)/totVol24 : 0;
         return {...c, rising:ri, stable:st, falling:fa, total:items.length, yoy, color:katColor(c.k1), totVol};
       }).filter(c => c.total > 0).sort((a,b) => b.total - a.total).slice(0, 20);
-    }, [trendCatLevel, trendCatFilter]);
+    }, [trendCatLevel, trendCatFilter, filteredKws]);
 
     const activeFilterCount = (filterK1?1:0) + (filterK2?1:0) + (filterK3?1:0) + (filterSezType?1:0) + (filterPeak!==''?1:0) + (filterMinVol>0?1:0);
     const clearFilters = () => { setFilterK1(''); setFilterK2(''); setFilterK3(''); setFilterSezType(''); setFilterPeak(''); setFilterMinVol(0); };
@@ -1746,23 +1753,30 @@ window.TABS = (function(){
       return m;
     }, []);
 
+    const gK1Arr = globalFilter?.globalK1 || [];
+    const gK2Arr = globalFilter?.globalK2 || [];
+    const gK3Arr = globalFilter?.globalK3 || [];
+    const gBrandArr = globalFilter?.globalBrand || [];
     const scopedPrice = React.useMemo(() => {
       if (!hasGlobal) return D.price;
+      const k1S = gK1Arr.length ? new Set(gK1Arr) : null;
+      const k2S = gK2Arr.length ? new Set(gK2Arr) : null;
+      const k3S = gK3Arr.length ? new Set(gK3Arr) : null;
+      const brS = gBrandArr.length ? new Set(gBrandArr) : null;
       return D.price.filter(p => {
-        if (gK1Set && !gK1Set.has(p.k1)) return false;
-        if (gK2Set && !gK2Set.has(p.k2)) return false;
-        // k3 not always in price rows - try from full kw
-        if (gK3Set) {
+        if (k1S && !k1S.has(p.k1)) return false;
+        if (k2S && !k2S.has(p.k2)) return false;
+        if (k3S) {
           const full = kwByKw.get(p.kw);
-          if (!full || !gK3Set.has(full.k3)) return false;
+          if (!full || !k3S.has(full.k3)) return false;
         }
-        if (gBrandSet) {
+        if (brS) {
           const full = kwByKw.get(p.kw);
-          if (!full || !gBrandSet.has(full.brand)) return false;
+          if (!full || !brS.has(full.brand)) return false;
         }
         return true;
       });
-    }, [hasGlobal, globalFilter, kwByKw]);
+    }, [gK1Arr, gK2Arr, gK3Arr, gBrandArr, kwByKw]);
 
     const sorted = [...scopedPrice].sort((a,b)=>b.a25-a.a25);
     const monthly = aggregateMonthly(scopedPrice.map(p => {
@@ -1783,7 +1797,7 @@ window.TABS = (function(){
         h(Kpi,{label:'Fiyat Intent Hacmi', value:fmtNum(priceTotal), chip:fmtPct(priceYoy), chipClass:trendClass(priceYoy), sub: hasGlobal ? 'filtreli · 2025' : '2025 · dönüşüm sinyali', accent:true}),
         h(Kpi,{label:'Fiyat KW', value:fmtNum(scopedPrice.length)}),
         h(Kpi,{label:'Pazar İçi Pay', value: TOTAL_2025 ? (priceTotal/TOTAL_2025*100).toFixed(1).replace('.',',')+'%' : '—', sub:'toplam aramanın'}),
-        h(Kpi,{label:'Peak Ay', value: monthly.length ? TR_MONTHS[monthly.indexOf(Math.max(...monthly))] : '-'}),
+        h(Kpi,{label:'Peak Ay', value: monthly.reduce((s,v)=>s+v,0) > 0 ? TR_MONTHS[monthly.indexOf(Math.max(...monthly))] : '-'}),
       ),
       h('div',{className:'insight-strip'},
         h('span',{className:'arrow'}, I.ArrowRight(14)),
@@ -2097,7 +2111,9 @@ window.TABS = (function(){
         const rising = [...withVol].filter(b => b.yoy >= 0.25).sort((a,b) => b.yoy - a.yoy).slice(0, 6);
         const falling = [...withVol].filter(b => b.yoy <= -0.25).sort((a,b) => a.yoy - b.yoy).slice(0, 6);
         if (rising.length === 0 && falling.length === 0) return null;
-        const renderList = (items, accent, emptyMsg, label, desc) => h('div',{className:'card', style:{flex:1, minWidth:280}},
+        const renderList = (items, accent, emptyMsg, label, desc) => h('div',{
+          className:'card', style:{minWidth:0, borderLeft:`3px solid ${accent}`}
+        },
           h('div',{className:'card-header'}, h('h3',null, label,
             h(InfoIcon,null,desc)
           )),
@@ -2119,9 +2135,9 @@ window.TABS = (function(){
                     h('span',{
                       className:'pill ' + (b.yoy > 0 ? 'pos' : 'neg'),
                       style:{fontSize:11, fontWeight:700, padding:'2px 7px'}
-                    }, (b.yoy > 0 ? '↑ +' : '↓ ') + fmtPct(b.yoy, 0).replace('+',''))
+                    }, (b.yoy > 0 ? '↑ +' : '↓ ') + fmtPct(b.yoy, 0).replace(/[+-]/,''))
                   ),
-                  h('div',{style:{display:'flex',alignItems:'center',gap:10,fontSize:11,color:'var(--ink-3)'}},
+                  h('div',{style:{display:'flex',alignItems:'center',gap:10,fontSize:11,color:'var(--ink-3)', flexWrap:'wrap'}},
                     h('span',null, fmtNum(b.sum25), ' / 2025'),
                     h('span',{style:{width:3,height:3,borderRadius:'50%',background:'var(--ink-3)',opacity:.5}}),
                     h('span',null, b.count, ' KW'),
@@ -2135,7 +2151,7 @@ window.TABS = (function(){
                 ))
               )
         );
-        return h('div',{className:'grid grid-2', style:{marginBottom:18, gap:14, display:'grid', gridTemplateColumns:'1fr 1fr'}},
+        return h('div',{className:'grid grid-2', style:{marginBottom:18, gap:14}},
           renderList(rising, 'var(--green)', 'Yükselen marka yok', '⭐ Yıldız Markalar', 'YoY ≥ +%25 büyüyen & yıllık hacmi ≥ 50K olan markalar. Portföy dışı olan bu markalar en yüksek büyüme ivmesiyle pazar fırsatı sinyali veriyor.'),
           renderList(falling, 'var(--red)', 'Düşen marka yok', '📉 Eriyen Markalar', 'YoY ≤ -%25 küçülen markalar. Pazardaki ilginin azaldığı markalar — portföye alınması halinde risk oluşturabilir.')
         );
