@@ -15,6 +15,15 @@ html { scroll-behavior: smooth; }
 }
 .tab-content-anim { animation: tab-fade-in .28s cubic-bezier(.2, .8, .2, 1); }
 
+/* Flash target — brief outline highlight when scrolled to via click */
+@keyframes flash-outline {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--coral) 70%, transparent); }
+  40% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--coral) 35%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.flash-target { animation: flash-outline 1.1s ease-out; }
+@media (prefers-reduced-motion: reduce) { .flash-target { animation: none; } }
+
 /* Smooth transition on common interactive elements */
 button, .chip-btn, .tab, .multiselect-trigger, .ms-option, .share-row, .clickable {
   transition: background .18s ease-out, color .18s ease-out, border-color .18s ease-out, transform .15s ease-out, box-shadow .18s ease-out;

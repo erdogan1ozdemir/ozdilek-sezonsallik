@@ -53,6 +53,8 @@
     const [globalK2, setGlobalK2] = React.useState(() => (initialHash && initialHash.k2) || []);
     const [globalK3, setGlobalK3] = React.useState(() => (initialHash && initialHash.k3) || []);
     const [globalBrand, setGlobalBrand] = React.useState(() => (initialHash && initialHash.brand) || []);
+    // Özdilekte Var / Yok — katalog durumu filtresi (global). '' = tümü, 'Var' = sadece portföyde, 'Yok' = sadece portföy dışı
+    const [globalCatalog, setGlobalCatalog] = React.useState('');
     // Secondary analytical filters (used by Trendler + Keyword + OutOfCatalog + Fiyat tabs)
     const [globalPeakMonth, setGlobalPeakMonth] = React.useState([]);
     const [globalPeakQuarter, setGlobalPeakQuarter] = React.useState([]);
@@ -60,6 +62,7 @@
     const [globalBucket, setGlobalBucket] = React.useState([]);
     const [globalTrend, setGlobalTrend] = React.useState('');  // 'rising'|'falling'|'stable'|''
     const hasGlobalFilter = globalK1.length > 0 || globalK2.length > 0 || globalK3.length > 0 || globalBrand.length > 0
+      || !!globalCatalog
       || globalPeakMonth.length > 0 || globalPeakQuarter.length > 0 || globalSezType.length > 0
       || globalBucket.length > 0 || !!globalTrend;
     const allKat1 = React.useMemo(() => D.kat1Summary.map(k => k.k1), []);
@@ -71,12 +74,13 @@
     const allKat3Filtered = React.useMemo(() =>
       [...new Set(D.keywords.filter(k => (!g_k1Set || g_k1Set.has(k.k1)) && (!g_k2Set || g_k2Set.has(k.k2))).map(k => k.k3))].sort()
     , [globalK1, globalK2]);
-    // Brand options = union of in-catalog + out-of-catalog brands, filtered by Kat 1 selection
+    // Brand options = union of in-catalog + out-of-catalog brands, filtered by Kat 1 + Catalog selection
     const allBrandsGlobal = React.useMemo(() => {
       const pool = (D.keywords || []).concat(D.outKeywords || []);
-      const filtered = g_k1Set ? pool.filter(k => g_k1Set.has(k.k1)) : pool;
+      let filtered = g_k1Set ? pool.filter(k => g_k1Set.has(k.k1)) : pool;
+      if (globalCatalog) filtered = filtered.filter(k => k.catalog === globalCatalog);
       return [...new Set(filtered.map(k => k.brand).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'tr'));
-    }, [globalK1]);
+    }, [globalK1, globalCatalog]);
     // Secondary filter options
     const TR_MONTHS_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
     const monthOptions = React.useMemo(() => TR_MONTHS_SHORT, []);
@@ -211,9 +215,9 @@
     const activeTab = tab;
 
     const globalFilter = {
-      globalK1, globalK2, globalK3, globalBrand,
+      globalK1, globalK2, globalK3, globalBrand, globalCatalog,
       globalPeakMonth, globalPeakQuarter, globalSezType, globalBucket, globalTrend,
-      setGlobalK1, setGlobalK2, setGlobalK3, setGlobalBrand,
+      setGlobalK1, setGlobalK2, setGlobalK3, setGlobalBrand, setGlobalCatalog,
       setGlobalPeakMonth, setGlobalPeakQuarter, setGlobalSezType, setGlobalBucket, setGlobalTrend,
       hasGlobalFilter
     };
@@ -339,10 +343,31 @@
             onChange: setGlobalBrand,
             width: 220
           }),
+          h('div',{className:'segmented', title:'Özdilek Kataloğu', style:{fontSize:11}},
+            h('button',{className:globalCatalog===''?'active':'', onClick:()=>setGlobalCatalog('')}, 'Tüm Markalar'),
+            h('button',{
+              className:globalCatalog==='Var'?'active':'',
+              onClick:()=>{
+                setGlobalCatalog('Var');
+                // Auto-clear Marka multi-select to show all Var brands scope
+                setGlobalBrand([]);
+              },
+              title:'Özdilek portföyündeki tüm markalar'
+            }, 'Özdilekte Var'),
+            h('button',{
+              className:globalCatalog==='Yok'?'active':'',
+              onClick:()=>{
+                setGlobalCatalog('Yok');
+                setGlobalBrand([]);
+              },
+              title:'Özdilek portföyü dışındaki tüm markalar'
+            }, 'Özdilekte Yok')
+          ),
           hasGlobalFilter && h('button',{
             className:'chip-btn',
             onClick:()=>{
               setGlobalK1([]); setGlobalK2([]); setGlobalK3([]); setGlobalBrand([]);
+              setGlobalCatalog('');
               setGlobalPeakMonth([]); setGlobalPeakQuarter([]); setGlobalSezType([]);
               setGlobalBucket([]); setGlobalTrend('');
             }
@@ -378,6 +403,7 @@
           globalK2.map(k => h('button',{key:'2'+k, className:'filter-chip', onClick:()=>setGlobalK2(globalK2.filter(x=>x!==k))}, 'K2: '+k, h('span',{className:'x'},'×'))),
           globalK3.map(k => h('button',{key:'3'+k, className:'filter-chip', onClick:()=>setGlobalK3(globalK3.filter(x=>x!==k))}, 'K3: '+k, h('span',{className:'x'},'×'))),
           globalBrand.map(b => h('button',{key:'b'+b, className:'filter-chip', onClick:()=>setGlobalBrand(globalBrand.filter(x=>x!==b))}, 'Marka: '+b, h('span',{className:'x'},'×'))),
+          globalCatalog && h('button',{className:'filter-chip', onClick:()=>setGlobalCatalog('')}, 'Özdilekte '+globalCatalog, h('span',{className:'x'},'×')),
           globalPeakMonth.map(m => h('button',{key:'pm'+m, className:'filter-chip', onClick:()=>setGlobalPeakMonth(globalPeakMonth.filter(x=>x!==m))}, 'Peak: '+m, h('span',{className:'x'},'×'))),
           globalPeakQuarter.map(q => h('button',{key:'pq'+q, className:'filter-chip', onClick:()=>setGlobalPeakQuarter(globalPeakQuarter.filter(x=>x!==q))}, 'Ç: '+q.split(' ')[0], h('span',{className:'x'},'×'))),
           globalSezType.map(t => h('button',{key:'st'+t, className:'filter-chip', onClick:()=>setGlobalSezType(globalSezType.filter(x=>x!==t))}, t, h('span',{className:'x'},'×'))),

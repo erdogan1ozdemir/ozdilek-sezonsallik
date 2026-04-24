@@ -377,6 +377,62 @@ React'te `key={'tab-'+tab}` kullanılarak tab değişiminde DOM sıfırlanır ve
 
 `prefers-reduced-motion: reduce` kullanıcıları için animasyon devre dışıdır.
 
+## 9.11 globalCatalog Filter (Özdilekte Var/Yok)
+
+Global filter bar'da Marka MultiSelect'in yanına "Tüm Markalar / Özdilekte Var / Özdilekte Yok" segmented butonu eklenmiştir. Tek tıkla ilgili katalog durumundaki **tüm** markalar filtreye dahil olur (aksi halde tek tek Marka MultiSelect'ten seçmek gerekir).
+
+```js
+const [globalCatalog, setGlobalCatalog] = useState('');  // '' | 'Var' | 'Yok'
+```
+
+- UI: segmented buton; seçilince `globalBrand` auto-clear edilir (scope tek başına globalCatalog olur)
+- Brand MultiSelect options: `globalCatalog` set'e göre daralır (sadece Var veya sadece Yok markaları listelenir)
+- `applyGlobalFilter`: `catF = gf.globalCatalog` olarak her keyword'ün `k.catalog === catF` kontrolü uygulanır
+- Brand tab'ındaki tab-level "Tümü / Var / Yok" segmented kaldırıldı — `catFilter = globalFilter.globalCatalog` ile global'den okunur (single source of truth)
+- Filter chip: "Özdilekte Var ×" / "Özdilekte Yok ×"
+- Temizle butonu globalCatalog'u da sıfırlar
+
+## 9.12 Click-to-Scroll Navigation
+
+Matrix ve drill-down chart'larda kullanıcının bağlamı koruyabilmesi için click → filter ekleme + ilgili data alanına smooth scroll. Üç yerde kullanılır:
+
+**Brand tab — Matrix brand satırı click:**
+```js
+onClick: () => {
+  globalFilter.setGlobalBrand([r.brand]);
+  setTimeout(() => scrollAndFlash(kwListRef), 50);
+}
+```
+
+**Brand tab — Matrix hücresi click** (marka × kategori kesişimi):
+```js
+onClick: () => {
+  globalFilter.setGlobalBrand([r.brand]);
+  // Column-level filter — Kat1/Kat2/Kat3 based on current drill level
+  if (level === 'k1') globalFilter.setGlobalK1([col]);
+  else if (level === 'k2') globalFilter.setGlobalK2([col]);
+  else globalFilter.setGlobalK3([col]);
+  setTimeout(() => scrollAndFlash(kwListRef), 80);
+}
+```
+
+**Kategori Pazar Payı chart row click:** `onClickRow` callback setter'ı çağırır + `scrollAndFlash(kwListRef)`.
+
+`scrollAndFlash(ref)` helper:
+- `smoothScrollTo(el)` — `scrollIntoView({behavior:'smooth', block:'start'})`
+- `el.classList.add('flash-target')` — CSS keyframe `flash-outline` (coral ring pulse, 1.1s)
+- `scroll-margin-top: 170` ile hedef elementler sticky header'ın altına yerleşir
+
+CSS:
+```css
+@keyframes flash-outline {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--coral) 70%, transparent); }
+  40% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--coral) 35%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.flash-target { animation: flash-outline 1.1s ease-out; }
+```
+
 ## 10. Prensipler Özeti
 
 1. **Single source of truth**: Filter state app.jsx'te, `globalFilter` prop olarak dağıtılır

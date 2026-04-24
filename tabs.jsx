@@ -17,18 +17,20 @@ window.TABS = (function(){
     const k2S = (gf.globalK2 || []).length ? new Set(gf.globalK2) : null;
     const k3S = (gf.globalK3 || []).length ? new Set(gf.globalK3) : null;
     const brS = (gf.globalBrand || []).length ? new Set(gf.globalBrand) : null;
+    const catF = gf.globalCatalog || '';  // '' | 'Var' | 'Yok'
     const mS = (gf.globalPeakMonth || []).length ? new Set(gf.globalPeakMonth) : null;
     const qS = (gf.globalPeakQuarter || []).length ? new Set(gf.globalPeakQuarter) : null;
     const stS = (gf.globalSezType || []).length ? new Set(gf.globalSezType) : null;
     const bkS = (gf.globalBucket || []).length ? new Set(gf.globalBucket) : null;
     const tr = gf.globalTrend || '';
-    if (!k1S && !k2S && !k3S && !brS && !mS && !qS && !stS && !bkS && !tr) return keywords;
+    if (!k1S && !k2S && !k3S && !brS && !catF && !mS && !qS && !stS && !bkS && !tr) return keywords;
     const TR_MO_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
     return keywords.filter(k => {
       if (k1S && !k1S.has(k.k1)) return false;
       if (k2S && !k2S.has(k.k2)) return false;
       if (k3S && !k3S.has(k.k3)) return false;
       if (brS && !brS.has(k.brand)) return false;
+      if (catF && k.catalog !== catF) return false;
       if (bkS && !bkS.has(k.bucket)) return false;
       if (tr === 'rising' && !(k.yoy > 0.05)) return false;
       if (tr === 'falling' && !(k.yoy < -0.05)) return false;
@@ -2464,7 +2466,8 @@ window.TABS = (function(){
   // === Brand Tab ===
   function BrandTab({setKeywordModal, onNavigateKw, onNavigateBrand, globalFilter}) {
     const [q, setQ] = React.useState('');
-    const [catFilter, setCatFilter] = React.useState('');  // '' | 'Var' | 'Yok'
+    // catFilter mirrors globalFilter.globalCatalog — reads from global (single source of truth)
+    const catFilter = globalFilter?.globalCatalog || '';
     const [sort, setSort] = React.useState({k:'sum25', d:-1});
     const [expandedBrands, setExpandedBrands] = React.useState(() => new Set());
     const [page, setPage] = React.useState(0);
@@ -2475,6 +2478,18 @@ window.TABS = (function(){
     const [brandKwPage, setBrandKwPage] = React.useState(0);
     const [brandKwSort, setBrandKwSort] = React.useState({k:'a25', d:-1});
     React.useEffect(() => setBrandKwPage(0), [brandKwQuery, brandKwSort, catFilter, globalFilter]);
+
+    // Refs for smooth-scroll on matrix / chart click
+    const kwListRef = React.useRef(null);
+    const brandTableRef = React.useRef(null);
+    const scrollAndFlash = (ref) => {
+      if (!ref?.current) return;
+      smoothScrollTo(ref.current);
+      // Brief flash outline to draw attention
+      const el = ref.current;
+      el.classList.add('flash-target');
+      setTimeout(() => el.classList.remove('flash-target'), 1200);
+    };
 
     const toggleExpand = (b) => {
       setExpandedBrands(prev => {
@@ -2599,14 +2614,9 @@ window.TABS = (function(){
         topBrand && h(Kpi,{label:'En Büyük Marka', value:topBrand.brand, sub:fmtNum(topBrand.sum25)+' / 2025'}),
       ),
 
-      // Filter bar
+      // Filter bar — catFilter artık global'de (Kategori & Marka Filtresi > Özdilekte Var/Yok)
       h('div',{className:'toolbar', style:{marginBottom:14}},
-        h('input',{className:'input input-search', placeholder:'Marka ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:180}}),
-        h('div',{className:'segmented'},
-          h('button',{className:catFilter===''?'active':'', onClick:()=>setCatFilter('')}, 'Tümü'),
-          h('button',{className:catFilter==='Var'?'active':'', onClick:()=>setCatFilter('Var')}, 'Özdilekte Var'),
-          h('button',{className:catFilter==='Yok'?'active':'', onClick:()=>setCatFilter('Yok')}, 'Özdilekte Yok')
-        ),
+        h('input',{className:'input input-search', placeholder:'Marka ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:220}}),
         h('div',{style:{flex:1}}),
         h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' marka'),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
@@ -2654,6 +2664,8 @@ window.TABS = (function(){
           const cur = activeState;
           if (cur.includes(label)) setter(cur.filter(x => x !== label));
           else setter([...cur, label]);
+          // Smooth scroll to keyword list when filter changes
+          setTimeout(() => scrollAndFlash(kwListRef), 80);
         } : undefined;
         const copyData = () => ({
           headers: ['Kategori', 'Avg Hacim', 'Pazar Payı %'],
@@ -2707,7 +2719,7 @@ window.TABS = (function(){
             r.m25 ? 'Q'+(Math.floor(r.m25.indexOf(Math.max(...r.m25))/3)+1) : ''
           ])
         });
-        return h('div',{className:'card flush', style:{marginBottom:18}},
+        return h('div',{className:'card flush', ref: kwListRef, style:{marginBottom:18, scrollMarginTop:170}},
           h('div',{className:'card-title-row', style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
             h('h3',{style:{flex:1,minWidth:200}}, 'Keyword Listesi · Marka Filtreli',
               h(InfoIcon,null,
@@ -2871,7 +2883,12 @@ window.TABS = (function(){
               ...brands.flatMap((r, ri) => [
                 h('div',{
                   key:'b'+ri, className:'clickable',
-                  onClick:()=>toggleExpand(r.brand),
+                  onClick:()=>{
+                    // Set globalBrand filter + smooth scroll to keyword list below
+                    if (globalFilter?.setGlobalBrand) globalFilter.setGlobalBrand([r.brand]);
+                    setTimeout(() => scrollAndFlash(kwListRef), 50);
+                  },
+                  title: `${r.brand} markasını filtreye ekle ve keyword listesine scroll`,
                   style:{
                     padding:'6px 8px', fontSize:12, fontWeight:600, cursor:'pointer',
                     display:'flex', alignItems:'center', gap:6, minWidth:0,
@@ -2894,13 +2911,23 @@ window.TABS = (function(){
                   const avgV = toMonthlyAvg(v);
                   return h('div',{
                     key:'c'+ri+'_'+ci,
+                    className:'clickable',
+                    onClick:()=>{
+                      // Set brand + col-level filter, then scroll to keyword list
+                      if (globalFilter?.setGlobalBrand) globalFilter.setGlobalBrand([r.brand]);
+                      if (level === 'k1' && globalFilter?.setGlobalK1) globalFilter.setGlobalK1([col]);
+                      else if (level === 'k2' && globalFilter?.setGlobalK2) globalFilter.setGlobalK2([col]);
+                      else if (level === 'k3' && globalFilter?.setGlobalK3) globalFilter.setGlobalK3([col]);
+                      setTimeout(() => scrollAndFlash(kwListRef), 80);
+                    },
                     style:{
                       padding:'8px 4px', fontSize:10, fontWeight:600, textAlign:'center',
                       background: bg, color: txtColor, borderRadius:3,
                       borderTop: ri>0 ? '1px solid var(--line)' : 'none',
-                      minHeight:28, display:'flex', alignItems:'center', justifyContent:'center'
+                      minHeight:28, display:'flex', alignItems:'center', justifyContent:'center',
+                      cursor: 'pointer'
                     },
-                    title: `${r.brand} · ${col}: ${fmtFull(avgV)} /ay (2025 avg)`
+                    title: `${r.brand} · ${col}: ${fmtFull(avgV)} /ay — tıkla: marka+kategori filtrele + keyword listesine scroll`
                   }, v > 0 ? fmtNum(avgV) : '·');
                 }),
                 h('div',{
