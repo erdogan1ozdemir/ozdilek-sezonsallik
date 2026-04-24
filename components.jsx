@@ -573,7 +573,9 @@ window.C = (function(){
   }
 
   // MultiSelect - dropdown with checkboxes for multi-category selection
-  function MultiSelect({label, options, selected, onChange, colorMap, maxDisplay=2, width=180, searchable=true}) {
+  // MultiSelect — opsiyonel `catalogFilter` ile option'lar dropdown içinden
+  // Var/Yok/Tümü olarak filtrelenebilir. Dropdown'un üstünde küçük chip'ler gösterilir.
+  function MultiSelect({label, options, selected, onChange, colorMap, maxDisplay=2, width=180, searchable=true, catalogFilter}) {
     const [open, setOpen] = React.useState(false);
     const [query, setQuery] = React.useState('');
     const ref = React.useRef(null);
@@ -596,12 +598,16 @@ window.C = (function(){
       selected.length <= maxDisplay ? selected.join(', ') :
       `${selected.length} seçili`;
 
-    // Filter options by search query (case-insensitive, Turkish-friendly)
+    // Filter options by search query (case-insensitive, Turkish-friendly) + optional catalog filter
     const filteredOptions = React.useMemo(() => {
-      if (!query.trim()) return options;
+      let opts = options;
+      if (catalogFilter && catalogFilter.value && catalogFilter.getOptionCatalog) {
+        opts = opts.filter(o => catalogFilter.getOptionCatalog(o) === catalogFilter.value);
+      }
+      if (!query.trim()) return opts;
       const q = query.toLowerCase().trim();
-      return options.filter(o => String(o).toLowerCase().includes(q));
-    }, [options, query]);
+      return opts.filter(o => String(o).toLowerCase().includes(q));
+    }, [options, query, catalogFilter]);
 
     return h('div',{ref, className:'multiselect', style:{width}},
       h('button',{
@@ -631,9 +637,39 @@ window.C = (function(){
             }
           })
         ),
+        // Optional catalog filter (Var/Yok) — small chip-style pills inside the dropdown
+        catalogFilter && h('div',{
+          className:'ms-catalog',
+          style:{
+            display:'flex', alignItems:'center', gap:4, flexWrap:'wrap',
+            padding:'6px 10px 4px', borderBottom:'1px solid var(--line)'
+          }
+        },
+          h('span',{style:{fontSize:10, color:'var(--ink-3)', fontWeight:600, textTransform:'uppercase', letterSpacing:'.08em', marginRight:4}}, (catalogFilter.label || 'Katalog') + ':'),
+          (catalogFilter.options || [
+            {value:'', label:'Tümü'},
+            {value:'Var', label:'Özdilekte Var'},
+            {value:'Yok', label:'Özdilekte Yok'}
+          ]).map(opt => {
+            const active = (catalogFilter.value || '') === opt.value;
+            return h('button',{
+              key: opt.value || 'all',
+              className: 'ms-catalog-chip' + (active ? ' active' : ''),
+              onClick: (e) => { e.stopPropagation(); catalogFilter.onChange(opt.value); },
+              style:{
+                padding:'3px 9px', fontSize:11, borderRadius:999, cursor:'pointer',
+                border:'1px solid ' + (active ? 'var(--coral)' : 'var(--line)'),
+                background: active ? 'color-mix(in srgb, var(--coral) 14%, var(--bg))' : 'var(--bg)',
+                color: active ? 'var(--coral-deep, var(--coral))' : 'var(--ink-2)',
+                fontWeight: active ? 700 : 500,
+                transition: 'background .15s, color .15s, border-color .15s'
+              }
+            }, opt.label);
+          })
+        ),
         h('div',{className:'ms-actions'},
           h('button',{className:'ms-action', onClick:()=>onChange([])}, 'Hiçbiri'),
-          h('button',{className:'ms-action', onClick:()=>onChange([...options])}, 'Hepsi'),
+          h('button',{className:'ms-action', onClick:()=>onChange([...filteredOptions])}, 'Hepsi'),
           query && h('span',{style:{fontSize:10,color:'var(--ink-3)',marginLeft:'auto',paddingRight:4}}, filteredOptions.length + '/' + options.length)
         ),
         h('div',{className:'ms-options'},

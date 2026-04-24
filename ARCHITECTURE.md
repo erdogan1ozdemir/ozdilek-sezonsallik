@@ -379,18 +379,32 @@ React'te `key={'tab-'+tab}` kullanılarak tab değişiminde DOM sıfırlanır ve
 
 ## 9.11 globalCatalog Filter (Özdilekte Var/Yok)
 
-Global filter bar'da Marka MultiSelect'in yanına "Tüm Markalar / Özdilekte Var / Özdilekte Yok" segmented butonu eklenmiştir. Tek tıkla ilgili katalog durumundaki **tüm** markalar filtreye dahil olur (aksi halde tek tek Marka MultiSelect'ten seçmek gerekir).
+Marka MultiSelect'in **dropdown'u içinde** katalog filtresi: "Tümü / Özdilekte Var / Özdilekte Yok" chip'leri. Filter bar kalabalığı azaltıldı — bu kontroller dışarıda görünmez, Marka açılınca ortaya çıkar.
 
 ```js
 const [globalCatalog, setGlobalCatalog] = useState('');  // '' | 'Var' | 'Yok'
 ```
 
-- UI: segmented buton; seçilince `globalBrand` auto-clear edilir (scope tek başına globalCatalog olur)
-- Brand MultiSelect options: `globalCatalog` set'e göre daralır (sadece Var veya sadece Yok markaları listelenir)
-- `applyGlobalFilter`: `catF = gf.globalCatalog` olarak her keyword'ün `k.catalog === catF` kontrolü uygulanır
-- Brand tab'ındaki tab-level "Tümü / Var / Yok" segmented kaldırıldı — `catFilter = globalFilter.globalCatalog` ile global'den okunur (single source of truth)
-- Filter chip: "Özdilekte Var ×" / "Özdilekte Yok ×"
-- Temizle butonu globalCatalog'u da sıfırlar
+- **UI**: Marka MultiSelect'e `catalogFilter` prop'u geçilir:
+  ```js
+  catalogFilter: {
+    label: 'Özdilekte',
+    value: globalCatalog,
+    onChange: setGlobalCatalog,
+    getOptionCatalog: (brand) => brandCatalogMap.get(brand) || '',
+    options: [
+      {value:'', label:'Tümü'},
+      {value:'Var', label:'Özdilekte Var'},
+      {value:'Yok', label:'Özdilekte Yok'}
+    ]
+  }
+  ```
+- **Dropdown behavior**: "Özdilekte Var" tıklanınca dropdown'daki option listesi o kataloğa daraltılır. "Hepsi" butonu artık `filteredOptions` (yani görünen kısmı) seçer → tek tıkla "tüm Var" veya "tüm Yok" markalar filtreye girer.
+- **brandCatalogMap**: app.jsx'te `D.keywords + D.outKeywords`'den `Map<brand, 'Var'|'Yok'|''>`. Var tercihli (bir marka hem Var hem Yok kw'lerine sahipse Var kabul edilir).
+- **applyGlobalFilter**: `catF = gf.globalCatalog` ile her keyword'ün `k.catalog === catF` kontrolü uygulanır — tüm tab'ları etkiler.
+- **Brand tab**: tab-level Var/Yok segmented kaldırıldı, `catFilter = globalFilter.globalCatalog` ile global'den okur (single source of truth).
+- **Filter chip**: "Özdilekte Var ×" / "Özdilekte Yok ×"
+- **Temizle butonu**: globalCatalog'u da sıfırlar.
 
 ## 9.12 Click-to-Scroll Navigation
 

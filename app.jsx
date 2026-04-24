@@ -74,13 +74,27 @@
     const allKat3Filtered = React.useMemo(() =>
       [...new Set(D.keywords.filter(k => (!g_k1Set || g_k1Set.has(k.k1)) && (!g_k2Set || g_k2Set.has(k.k2))).map(k => k.k3))].sort()
     , [globalK1, globalK2]);
-    // Brand options = union of in-catalog + out-of-catalog brands, filtered by Kat 1 + Catalog selection
+    // Brand options = union of in-catalog + out-of-catalog brands, filtered by Kat 1
+    // Catalog filter artık dropdown içinde; burada sadece Kat 1 scope uygulanır
     const allBrandsGlobal = React.useMemo(() => {
       const pool = (D.keywords || []).concat(D.outKeywords || []);
-      let filtered = g_k1Set ? pool.filter(k => g_k1Set.has(k.k1)) : pool;
-      if (globalCatalog) filtered = filtered.filter(k => k.catalog === globalCatalog);
+      const filtered = g_k1Set ? pool.filter(k => g_k1Set.has(k.k1)) : pool;
       return [...new Set(filtered.map(k => k.brand).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'tr'));
-    }, [globalK1, globalCatalog]);
+    }, [globalK1]);
+
+    // Brand → catalog (Var/Yok/'') lookup — MultiSelect içindeki catalog filter için
+    const brandCatalogMap = React.useMemo(() => {
+      const m = new Map();
+      const pool = (D.keywords || []).concat(D.outKeywords || []);
+      for (const k of pool) {
+        if (!k.brand) continue;
+        // Prefer definite Var/Yok over empty; Yok özellikle not edilmeli (bir marka hem Var hem Yok kw'ye sahip olabilir → tercihe bak)
+        const existing = m.get(k.brand);
+        if (!existing || (k.catalog && !existing)) m.set(k.brand, k.catalog || existing || '');
+        if (k.catalog === 'Var' && existing !== 'Var') m.set(k.brand, 'Var');
+      }
+      return m;
+    }, []);
     // Secondary filter options
     const TR_MONTHS_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
     const monthOptions = React.useMemo(() => TR_MONTHS_SHORT, []);
@@ -341,28 +355,19 @@
             options: allBrandsGlobal,
             selected: globalBrand,
             onChange: setGlobalBrand,
-            width: 220
+            width: 220,
+            catalogFilter: {
+              label: 'Özdilekte',
+              value: globalCatalog,
+              onChange: setGlobalCatalog,
+              getOptionCatalog: (brand) => brandCatalogMap.get(brand) || '',
+              options: [
+                {value: '', label: 'Tümü'},
+                {value: 'Var', label: 'Özdilekte Var'},
+                {value: 'Yok', label: 'Özdilekte Yok'}
+              ]
+            }
           }),
-          h('div',{className:'segmented', title:'Özdilek Kataloğu', style:{fontSize:11}},
-            h('button',{className:globalCatalog===''?'active':'', onClick:()=>setGlobalCatalog('')}, 'Tüm Markalar'),
-            h('button',{
-              className:globalCatalog==='Var'?'active':'',
-              onClick:()=>{
-                setGlobalCatalog('Var');
-                // Auto-clear Marka multi-select to show all Var brands scope
-                setGlobalBrand([]);
-              },
-              title:'Özdilek portföyündeki tüm markalar'
-            }, 'Özdilekte Var'),
-            h('button',{
-              className:globalCatalog==='Yok'?'active':'',
-              onClick:()=>{
-                setGlobalCatalog('Yok');
-                setGlobalBrand([]);
-              },
-              title:'Özdilek portföyü dışındaki tüm markalar'
-            }, 'Özdilekte Yok')
-          ),
           hasGlobalFilter && h('button',{
             className:'chip-btn',
             onClick:()=>{
