@@ -1014,7 +1014,7 @@ window.TABS = (function(){
   }
 
   // === Kategoriler Tab ===
-  function KategorilerTab({filter, setFilter, onNavigateKw}) {
+  function KategorilerTab({filter, setFilter, onNavigateKw, globalFilter}) {
     const [level, setLevel] = React.useState('kat1');
     const [catSort, setCatSort] = React.useState('vol');  // vol | yoyDesc | yoyAsc | alpha
     // Multi-selects - independent per level
@@ -1030,9 +1030,16 @@ window.TABS = (function(){
     }, [filter.k2]);
 
     const allKat1 = D.kat1Summary.map(k => k.k1);
-    const activeK1Set = multiK1.length ? new Set(multiK1) : null;
-    const activeK2Set = multiK2.length ? new Set(multiK2) : null;
-    const activeK3Set = multiK3.length ? new Set(multiK3) : null;
+    // Scope = global filter ∪ tab-internal multi (multi sürer cross-tab nav için, ama UI dışı)
+    const gK1 = globalFilter?.globalK1 || [];
+    const gK2 = globalFilter?.globalK2 || [];
+    const gK3 = globalFilter?.globalK3 || [];
+    const combinedK1 = gK1.length ? gK1 : multiK1;
+    const combinedK2 = gK2.length ? gK2 : multiK2;
+    const combinedK3 = gK3.length ? gK3 : multiK3;
+    const activeK1Set = combinedK1.length ? new Set(combinedK1) : null;
+    const activeK2Set = combinedK2.length ? new Set(combinedK2) : null;
+    const activeK3Set = combinedK3.length ? new Set(combinedK3) : null;
 
     // Available Kat2/Kat3 for MultiSelect, narrowed by upstream selections
     const allKat2 = React.useMemo(() =>
@@ -1091,83 +1098,8 @@ window.TABS = (function(){
     const clearAll = () => { setMultiK1([]); setMultiK2([]); setMultiK3([]); setFilter({}); };
 
     return h('div',null,
-      h('div',{className:'toolbar'},
-        h('div',{className:'segmented'},
-          h('button',{className:level==='kat1'?'active':'', onClick:()=>setLevel('kat1')}, `Kat 1 (${D.kat1Monthly.length})`),
-          h('button',{className:level==='kat2'?'active':'', onClick:()=>setLevel('kat2')}, `Kat 2 (${D.kat2Monthly.length})`),
-          h('button',{className:level==='kat3'?'active':'', onClick:()=>setLevel('kat3')}, `Kat 3 (${D.kat3Monthly.length})`)
-        ),
-        h(window.C.MultiSelect, {
-          label: 'Kat 1',
-          options: allKat1,
-          selected: multiK1,
-          onChange: (sel) => {
-            setMultiK1(sel);
-            // Clear sub-levels if their values no longer belong
-            const kat1Set = sel.length ? new Set(sel) : null;
-            if (kat1Set) {
-              setMultiK2(prev => prev.filter(k2 => D.keywords.some(kw => kat1Set.has(kw.k1) && kw.k2 === k2)));
-              setMultiK3(prev => prev.filter(k3 => D.keywords.some(kw => kat1Set.has(kw.k1) && kw.k3 === k3)));
-            }
-            setFilter({k1: sel.length === 1 ? sel[0] : null, k2: null});
-          },
-          colorMap: KAT1_COLORS,
-          width: 200
-        }),
-        h(window.C.MultiSelect, {
-          label: 'Kat 2',
-          options: allKat2,
-          selected: multiK2,
-          onChange: (sel) => {
-            setMultiK2(sel);
-            const kat2Set = sel.length ? new Set(sel) : null;
-            if (kat2Set) setMultiK3(prev => prev.filter(k3 => D.keywords.some(kw => kat2Set.has(kw.k2) && kw.k3 === k3)));
-            setFilter({...filter, k2: sel.length === 1 ? sel[0] : null});
-          },
-          width: 200
-        }),
-        level === 'kat3' && h(window.C.MultiSelect, {
-          label: 'Kat 3',
-          options: allKat3,
-          selected: multiK3,
-          onChange: setMultiK3,
-          width: 200
-        }),
-        h('div',{style:{flex:1}}),
-        h('div',{className:'segmented', title:'Sıralama'},
-          h('button',{className:catSort==='vol'?'active':'', onClick:()=>setCatSort('vol')}, 'Hacim ↓'),
-          h('button',{className:catSort==='yoyDesc'?'active':'', onClick:()=>setCatSort('yoyDesc')}, 'YoY ↑'),
-          h('button',{className:catSort==='yoyAsc'?'active':'', onClick:()=>setCatSort('yoyAsc')}, 'YoY ↓'),
-          h('button',{className:catSort==='alpha'?'active':'', onClick:()=>setCatSort('alpha')}, 'A-Z')
-        ),
-        h('span',{className:'txt-3', style:{fontSize:12}}, fmtFull(sorted.length)+' kategori'),
-        h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
-          const csv = toCSV(sorted, [
-            {label:'Kategori', get:r=>r.labels.join(' > ')},
-            {label:'2024 Ort', key:'a24'},
-            {label:'2025 Ort', key:'a25'},
-            {label:'YoY', get:r=>r.yoy?.toFixed(4)},
-            ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
-          ]);
-          downloadCSV(`${BRAND_SLUG}-${level}.csv`, csv);
-        }}, '↓ CSV'),
-      ),
-
-      (multiK1.length + multiK2.length + multiK3.length) > 0 && h('div',{className:'filter-chips'},
-        h('span',{className:'lbl'}, 'Filtre:'),
-        multiK1.map(k => h('button',{key:'1'+k, className:'filter-chip', onClick:()=>{
-          const next = multiK1.filter(x => x !== k);
-          setMultiK1(next); setFilter({k1: next.length === 1 ? next[0] : null, k2: null});
-        }}, 'K1: '+k, h('span',{className:'x'},'×'))),
-        multiK2.map(k => h('button',{key:'2'+k, className:'filter-chip', onClick:()=>{
-          const next = multiK2.filter(x => x !== k);
-          setMultiK2(next); setFilter({...filter, k2: next.length === 1 ? next[0] : null});
-        }}, 'K2: '+k, h('span',{className:'x'},'×'))),
-        multiK3.map(k => h('button',{key:'3'+k, className:'filter-chip', onClick:()=>{
-          setMultiK3(multiK3.filter(x => x !== k));
-        }}, 'K3: '+k, h('span',{className:'x'},'×'))),
-        h('button',{className:'chip-btn', onClick: clearAll}, 'Temizle')
-      ),
+      // Top filter bar kaldırıldı — level segmented + sort + CSV "Sezon Takvimi" kart header'ında.
+      // Kat 1/2/3 ve Marka filtreleri zaten üst global filter bar'da.
 
       // 12 Aylık Toplam Arama Hacmi (filtered)
       h('div',{className:'card', style:{marginBottom:18}},
@@ -1206,8 +1138,8 @@ window.TABS = (function(){
       ),
 
       h('div',{className:'card', style:{marginBottom:18}},
-        h('div',{className:'card-header'},
-          h('h3',null, `${level==='kat1'?'Kat 1':level==='kat2'?'Kat 2':'Kat 3'} Sezon Takvimi`,
+        h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
+          h('h3',{style:{flex:1, minWidth:200}}, `${level==='kat1'?'Kat 1':level==='kat2'?'Kat 2':'Kat 3'} Sezon Takvimi`,
             h(InfoIcon,{title:'Sezon Takvimi (Heatmap)'},
               h('p',null,h('strong',null,'Ne gösterir? '),'Her satır bir kategori, her sütun bir aydır. Hücrenin üst kısmında 2025 arama hacmi, alt rozetinde ise 2024\'e kıyasla değişim (YoY%) yer alır.'),
               h('p',null,h('strong',null,'Renk skalası: '),
@@ -1219,11 +1151,48 @@ window.TABS = (function(){
                 h('span',{style:{color:'#065F46',fontWeight:600}},'Yeşil +%'), ' 2024\'ten büyüdüğünü, ',
                 h('span',{style:{color:'#991B1B',fontWeight:600}},'kırmızı −%'), ' daraldığını gösterir.'
               ),
-              h('p',null,h('strong',null,'Hangi veriler? '),'Üst değer: aylık ', h('strong',null,'arama hacmi'),'. Alt rozet: ', h('strong',null,'YoY% değişim'),' (2024 → 2025 aynı ay).'),
+              h('p',null,h('strong',null,'Kontroller: '),'Üstteki Kat 1/2/3 segmented, hangi kategori seviyesinde gösterileceğini değiştirir. Sıralama segmented (Hacim ↓ / YoY ↑ / YoY ↓ / A-Z) satır sırasını değiştirir.'),
               h('div',{className:'info-note'},h('strong',null,'Ne için? '),'Pazarlama & SEO takvimi için ay bazlı ritim okunabilir. Hücreye tıklandığında alt kategori veya keyword detayına geçilir.')
             )
           ),
-          h('div',{className:'hint'}, `${sorted.length} kategori`)
+          // Level: Kat 1 / Kat 2 / Kat 3
+          h('div',{className:'segmented', title:'Kategori seviyesi'},
+            h('button',{className:level==='kat1'?'active':'', onClick:()=>setLevel('kat1')}, `Kat 1 (${D.kat1Monthly.length})`),
+            h('button',{className:level==='kat2'?'active':'', onClick:()=>setLevel('kat2')}, `Kat 2 (${D.kat2Monthly.length})`),
+            h('button',{className:level==='kat3'?'active':'', onClick:()=>setLevel('kat3')}, `Kat 3 (${D.kat3Monthly.length})`)
+          ),
+          // Sort
+          h('div',{className:'segmented', title:'Sıralama'},
+            h('button',{className:catSort==='vol'?'active':'', onClick:()=>setCatSort('vol')}, 'Hacim ↓'),
+            h('button',{className:catSort==='yoyDesc'?'active':'', onClick:()=>setCatSort('yoyDesc')}, 'YoY ↑'),
+            h('button',{className:catSort==='yoyAsc'?'active':'', onClick:()=>setCatSort('yoyAsc')}, 'YoY ↓'),
+            h('button',{className:catSort==='alpha'?'active':'', onClick:()=>setCatSort('alpha')}, 'A-Z')
+          ),
+          h('span',{className:'hint'}, `${sorted.length} kategori`),
+          h(CopyButton, {
+            getData: () => ({
+              headers: ['Kategori', '2024 Avg', '2025 Avg', 'YoY %', 'Peak Ay', ...TR_MONTHS.map(m => m+' 2025')],
+              rows: sorted.map(r => {
+                const peakIdx = r.m25 ? r.m25.indexOf(Math.max(...r.m25)) : -1;
+                return [
+                  r.labels.join(' > '),
+                  r.a24, r.a25, (r.yoy*100).toFixed(2)+'%',
+                  peakIdx >= 0 ? TR_MONTHS[peakIdx] : '',
+                  ...(r.m25 || [])
+                ];
+              })
+            })
+          }),
+          h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
+            const csv = toCSV(sorted, [
+              {label:'Kategori', get:r=>r.labels.join(' > ')},
+              {label:'2024 Avg', key:'a24'},
+              {label:'2025 Avg', key:'a25'},
+              {label:'YoY', get:r=>r.yoy?.toFixed(4)},
+              ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
+            ]);
+            downloadCSV(`${BRAND_SLUG}-${level}.csv`, csv);
+          }}, '↓ CSV')
         ),
         h('div',{className:'heatmap-scroll', style:{overflow:'auto', maxHeight: level === 'kat1' ? 'none' : 600}},
           h('div',{style:{minWidth:720}},
@@ -1491,24 +1460,7 @@ window.TABS = (function(){
       return order.filter(t => typeCount[t] > 0).map(t => ({ label:t, value:typeCount[t], color: colorOf(t) }));
     }, [filteredKws, sezTypeMap]);
 
-    // Volume-quartile recomputed on the filtered set
-    const quartileRows = React.useMemo(() => {
-      const sorted = [...filteredKws].sort((a,b) => (b.a25||0) - (a.a25||0));
-      const n = sorted.length;
-      if (n === 0) return [];
-      const labels = ['Head (En Yüksek 25%)','Üst Orta','Alt Orta','Tail (En Düşük 25%)'];
-      const out = [];
-      for (let i=0;i<4;i++) {
-        const from = Math.floor((i*n)/4);
-        const to = Math.floor(((i+1)*n)/4);
-        const slice = sorted.slice(from, to);
-        const total = slice.reduce((a,b)=>a+(b.a25||0),0) * 12;
-        const total24 = slice.reduce((a,b)=>a+(b.a24||0),0) * 12;
-        const yoy = total24 ? (total-total24)/total24 : 0;
-        out.push({ quartile: labels[i], count: slice.length, total, yoy });
-      }
-      return out;
-    }, [filteredKws]);
+    // (Hacim Quartile component'i kaldırıldı — gereksiz görüldü)
 
     // Category-level trend distribution (respects global filter via filteredKws)
     const perCat = React.useMemo(() => {
@@ -1696,23 +1648,6 @@ window.TABS = (function(){
               ))
             )
           ),
-          h('div',{className:'card'},
-            h('div',{className:'card-header'}, h('h3',null,'Hacim Quartile',
-              h(InfoIcon,null,'Filtrelenen keywordler hacimlerine göre 4 eşit dilime bölünür. En üst %25 = en çok aranan kelimeler. Her dilim toplam hacmin ne kadarını tutuyor ve YoY\'si.'))),
-            quartileRows.length === 0 ? h('div',{className:'empty'}, 'Veri yok') :
-            h('div',{style:{display:'flex',flexDirection:'column',gap:12}},
-              quartileRows.map((q,i) => h('div',{key:i},
-                h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3,fontSize:12}},
-                  h('span',{style:{fontWeight:600}}, q.quartile),
-                  h('span',{className:'num'}, fmtFull(q.count), ' KW')
-                ),
-                h('div',{style:{display:'flex',gap:8,fontSize:11,color:'var(--ink-3)',flexWrap:'wrap'}},
-                  h('span',null,'Vol: ', h('strong',{className:'num',style:{color:'var(--ink)'}}, fmtNum(q.total))),
-                  h('span',null,'YoY: ', h(YoYPill,{yoy:q.yoy})),
-                )
-              ))
-            )
-          )
         )
       ),
 
