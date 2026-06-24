@@ -1,6 +1,6 @@
 // Main App
 (function(){
-  const { OzetTab, KategorilerTab, KeywordTab, TrendlerTab, FiyatTab, OutOfCatalogTab, BrandTab, KeywordModal } = window.TABS;
+  const { OzetTab, KategorilerTab, KeywordTab, TrendlerTab, FiyatTab, OutOfCatalogTab, BrandTab, PlannedTab, KeywordModal } = window.TABS;
   const h = React.createElement;
 
   const B = window.BRAND || {};
@@ -224,6 +224,7 @@
       { id:'fiyat', label:'Fiyat Intent', badge:null },
       { id:'out', label:'Özdilekte Olmayan Markalar', badge: (window.DATA.outKeywords || []).length.toLocaleString('tr-TR') },
       { id:'brand', label:'Brand', badge: (window.DATA.brands || []).length.toLocaleString('tr-TR') },
+      ...(window.PLANNED ? [{ id:'planned', label:'Planlanan Kategoriler & Filtreler', badge: window.PLANNED.totalKeywords.toLocaleString('tr-TR') }] : []),
     ];
 
     const activeTab = tab;
@@ -245,6 +246,7 @@
         case 'fiyat': return h(FiyatTab, {setKeywordModal, globalFilter});
         case 'out': return h(OutOfCatalogTab, {setKeywordModal, onNavigateKw, onNavigateBrand, globalFilter});
         case 'brand': return h(BrandTab, {setKeywordModal, onNavigateKw, onNavigateBrand, globalFilter});
+        case 'planned': return h(PlannedTab, {});
       }
     }
 
@@ -304,8 +306,8 @@
         }, t.label, t.badge && h('span',{className:'badge'}, t.badge)))
       ),
 
-      // Global category filter - sticky under tabs, visible across all tabs
-      h('div',{className:'global-filter-wrap'+(filterScrolled?' scrolled':'')+(filterHidden?' hidden':'')},
+      // Global category filter - sticky under tabs. Hidden on standalone 'planned' tab (own filters).
+      tab !== 'planned' && h('div',{className:'global-filter-wrap'+(filterScrolled?' scrolled':'')+(filterHidden?' hidden':'')},
         h('div',{className:'filter-panel'},
           h('div',{className:'filter-panel-label'},
             h('span',{className:'fp-icon'},

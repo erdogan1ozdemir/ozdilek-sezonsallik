@@ -464,4 +464,21 @@ CSS:
 
 ---
 
+## 11. Standalone Tab: Planlanan Kategoriler & Filtreler
+
+Ana keyword evreninden (source.xlsx) **bağımsız** bir veri seti ile çalışan ek sekme. Category-generator çıktısının (kategori × filtre × marka × cinsiyet kırılımları + 2024-2026 aylık arama hacmi) sezonsallık ve marka dağılımı görünümü.
+
+**Veri akışı (ayrı pipeline):**
+```
+data/planned-source.xlsx  ──▶  scripts/build-planned.js  ──▶  data/planned.js (window.PLANNED)
+```
+- `build-planned.js` yalnızca "Arama Hacmi - Cinsiyet Çapraz 2" (aylık) sheet'ini okur; `avg2026`'yı 2026 Oca-May'dan, 12-aylık mevsimselliği takvim ayı ortalamasından, `yoy`'u 2024↔2025 toplamından hesaplar. Sadece `avg2026 > 0` kelimeler shiplenir (~14,6K). 69 kategori → 9 Kat 1 üst grubuna (`CAT_TO_KAT1`) maplenir.
+- `npm run build:planned` ile yeniden üretilir. `index.html`, `dashboard.js`'ten sonra `data/planned.js`'i yükler.
+
+**Bağımsızlık:** Üstteki global filtre (ana evrenin Kat1/Kat2/Kat3'ü) bu sekmeye uymaz → `app.jsx`'te `tab !== 'planned'` ile global filtre barı gizlenir. `PlannedTab` (tabs.jsx) kendi filtre state'ini tutar (Kat 1, Kategori, Filtre Tipi, Marka, Cinsiyet, arama). `window.PLANNED` yoksa sekme app.jsx'te otomatik gizlenir.
+
+**İçerik:** 5 KPI · Sezon Takvimi (Heatmap, Kat 1 seçilince kategorilere drill) · Marka × Kategori (Kat 1) Matris (BrandTab matris paterni; hücre tıkla → marka+kolon filtreye girer) · En Mevsimsel Kategoriler + Filtre Tipi ShareBars insight'ları · sortlanabilir/sayfalı keyword tablosu. Keyword'ler **Keyword tab'ına eklenmez** — tamamen standalone.
+
+---
+
 _Bu doküman Özdilekteyim dashboard'unun `76ab3ef` sonrası durumu temel alır. Yeni insight ekleyen her PR bu dosyayı günceller._

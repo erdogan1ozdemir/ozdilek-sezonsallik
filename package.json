@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "build": "node scripts/build-data.js",
+    "build:planned": "node scripts/build-planned.js",
     "test": "node --test scripts/build-data.test.js"
   },
   "dependencies": {
