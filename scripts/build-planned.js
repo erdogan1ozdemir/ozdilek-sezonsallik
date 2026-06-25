@@ -53,9 +53,11 @@ const num = v => (v == null || v === '' || isNaN(v)) ? 0 : Number(v);
 
 const out = [];
 const uncatewd = new Set();
+let totalCross = 0; // tüm çaprazlar (hacimsizler dahil) — "açılabilir sayfa" toplamı
 for (let r = 1; r < rows.length; r++) {
   const row = rows[r];
   if (!row || row[iKw] == null) continue;
+  totalCross++;
   const kategori = String(row[iKat] || '').trim();
   const monthly = [];
   for (let m = 0; m < N_MONTHS; m++) monthly.push(num(row[mStart + m]));
@@ -91,7 +93,10 @@ for (let r = 1; r < rows.length; r++) {
     kw: String(row[iKw]).trim(),
     v: avg2026,
     y: yoy == null ? null : Math.round(yoy * 1000) / 1000,
-    m: m12
+    m: m12,           // 12-aylık ortalama mevsimsellik (takvim/sparkline)
+    m24: m2024,       // 2024 aylık (trend grafiği)
+    m25: m2025,       // 2025 aylık (trend grafiği)
+    m26: m2026        // 2026 Oca-May (5 ay, kısmi trend)
   });
 }
 
@@ -104,6 +109,7 @@ const PLANNED = {
   catToKat1: CAT_TO_KAT1,
   months: TR_MONTHS,
   totalKeywords: out.length,
+  totalCross: totalCross,
   keywords: out
 };
 

@@ -19,23 +19,28 @@
   }/*EDITMODE-END*/;
 
   // URL state helpers - tab + global filter hash içinde yaşar; paylaşılabilir link
+  // Geçerli tab slug'ları — temiz per-tab URL (#keyword, #planned, …) için
+  const VALID_TABS = ['ozet','kategoriler','keyword','trendler','fiyat','out','brand','planned'];
   function readHashState() {
     try {
-      const m = location.hash.match(/^#?v=([^&]+)/);
-      if (!m) return null;
-      return JSON.parse(decodeURIComponent(atob(m[1])));
+      const raw = location.hash.replace(/^#/, '');
+      if (!raw) return null;
+      const parts = raw.split('&');
+      const lead = parts[0];
+      const vPart = parts.find(p => p.startsWith('v='));
+      let st = {};
+      if (vPart) { try { st = JSON.parse(decodeURIComponent(atob(vPart.slice(2)))) || {}; } catch {} }
+      if (VALID_TABS.includes(lead)) st.tab = lead;   // slug tab'ı override eder
+      return Object.keys(st).length ? st : null;
     } catch { return null; }
   }
   function writeHashState(state) {
-    const empty = !state.tab && state.k1.length === 0 && state.k2.length === 0 && state.k3.length === 0;
-    if (empty) {
-      // Temiz hash - filtre yoksa URL de sade kalsın
-      if (location.hash) history.replaceState(null, '', location.pathname + location.search);
-      return;
-    }
-    const encoded = btoa(encodeURIComponent(JSON.stringify(state)));
-    const newHash = '#v=' + encoded;
-    if (location.hash !== newHash) history.replaceState(null, '', location.pathname + location.search + newHash);
+    const tab = state.tab || 'ozet';
+    const hasFilter = (state.k1&&state.k1.length) || (state.k2&&state.k2.length) || (state.k3&&state.k3.length) || (state.brand&&state.brand.length);
+    // Temiz slug; filtre varsa paylaşılabilir encoded state'i ekle
+    let hash = '#' + tab;
+    if (hasFilter) hash += '&v=' + btoa(encodeURIComponent(JSON.stringify(state)));
+    if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
   }
 
   function App() {
@@ -150,6 +155,12 @@
 
     // Persist
     React.useEffect(() => { localStorage.setItem(STORAGE_TAB, tab); }, [tab]);
+    // Dışarıdan gelen hash değişimi (link yapıştırma / geri-ileri) → ilgili tab'a geç
+    React.useEffect(() => {
+      const onHash = () => { const st = readHashState(); if (st && st.tab && VALID_TABS.includes(st.tab)) setTab(st.tab); };
+      window.addEventListener('hashchange', onHash);
+      return () => window.removeEventListener('hashchange', onHash);
+    }, []);
     // Inject brand accent color at mount from window.BRAND_ACCENT (populated by data/dashboard.js)
     React.useEffect(() => {
       if (window.BRAND_ACCENT) {

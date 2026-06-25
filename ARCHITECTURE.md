@@ -477,7 +477,11 @@ data/planned-source.xlsx  ──▶  scripts/build-planned.js  ──▶  data/p
 
 **Bağımsızlık:** Üstteki global filtre (ana evrenin Kat1/Kat2/Kat3'ü) bu sekmeye uymaz → `app.jsx`'te `tab !== 'planned'` ile global filtre barı gizlenir. `PlannedTab` (tabs.jsx) kendi filtre state'ini tutar (Kat 1, Kategori, Filtre Tipi, Marka, Cinsiyet, arama). `window.PLANNED` yoksa sekme app.jsx'te otomatik gizlenir.
 
-**İçerik:** 5 KPI · Sezon Takvimi (Heatmap, Kat 1 seçilince kategorilere drill) · Marka × Kategori (Kat 1) Matris (BrandTab matris paterni; hücre tıkla → marka+kolon filtreye girer) · En Mevsimsel Kategoriler + Filtre Tipi ShareBars insight'ları · sortlanabilir/sayfalı keyword tablosu. Keyword'ler **Keyword tab'ına eklenmez** — tamamen standalone.
+**İçerik:** 6 KPI (Açılabilir Sayfa /totalCross · Hacim≥300 · Toplam Hacim · Kategori/69 · Marka · Peak Ay) · üst özet 2'li (**12 Aylık Hacim Trendi** LineChart 2024/2025/**2026** Oca-May kısmi + Filtre Tipi Dağılımı ShareBars, ikisi eşit yükseklik & ShareBars scroll) · **Sezon Takvimi** (custom grid, TÜM 69 kategori, hücre = 2025 hacmi + YoY% rozeti, satır-normalize kırmızı→sarı→yeşil, Hacim/YoY/A-Z sıralama; **kategori/hücreye tıkla → o kategorinin alt filtre varyasyonları takvimde açılır** (`seasonFocus`), breadcrumb ile geri, varyasyona tıkla → modal) · Marka × Çatı/Kategori Matris (drill) · **Pivot Tablo** (iki boyut seçici) · keyword tablosu (2. filtre barı, `tableLayout:fixed` → kolon genişliği sabit, boşlar daima sonda, satır tıkla → modal). Modal: kırılım chip'leri + **Aylık Arama Hacmi 2024–2026** LineChart + peak/dip. Filtre barı: Çatı Kategori, Kategori, Filtre Tipi, Marka, Cinsiyet, **Hacim Aralığı**. Veri: `m`(12-ay ort.), `m24`/`m25`(yıllık), `m26`(Oca-May). Keyword'ler **Keyword tab'ına eklenmez** — standalone.
+
+## 12. Tab Routing (slug)
+
+`app.jsx` `readHashState`/`writeHashState` artık temiz per-tab slug üretir: `#ozet`, `#keyword`, `#planned`… Filtre varsa `#keyword&v=<encoded>` olarak paylaşılabilir state eklenir (legacy `#v=…` linkleri geriye dönük okunur). `VALID_TABS` whitelist + `hashchange` listener ile dışarıdan yapıştırılan link doğru tab'a land eder. Böylece her sekmenin paylaşılabilir bir URL'i olur.
 
 ---
 

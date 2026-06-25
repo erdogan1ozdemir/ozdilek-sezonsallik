@@ -3086,13 +3086,42 @@ window.TABS = (function(){
     const [fFt, setFFt] = useState([]);
     const [fMarka, setFMarka] = useState([]);
     const [fCins, setFCins] = useState([]);
+    const [fBucket, setFBucket] = useState([]);
     const [q, setQ] = useState('');
     const [sort, setSort] = useState({k:'v', d:-1});
     const [page, setPage] = useState(0);
     const PAGE = 50;
+    const [modalKw, setModalKw] = useState(null);
+    // Sezon takvimi sıralama + drill (kategori → alt varyasyonlar)
+    const [seasonSort, setSeasonSort] = useState('hacim'); // 'hacim' | 'yoy' | 'az'
+    const [seasonFocus, setSeasonFocus] = useState(null);  // seçili kategori → alt filtre varyasyonları
+    // Pivot config
+    const [pivRow, setPivRow] = useState('c');
+    const [pivCol, setPivCol] = useState('ft');
+    // Keyword-list local filters (table üstü ikinci filtre alanı)
+    const [tq, setTq] = useState('');
+    const [tCat, setTCat] = useState([]);
+    const [tFt, setTFt] = useState([]);
+    const [tBucket, setTBucket] = useState([]);
     const tableRef = useRef(null);
 
     const setOf = a => a && a.length ? new Set(a) : null;
+
+    // Hacim bandları
+    const VOL_BUCKETS = [
+      {label:'10.000+', lo:10000, hi:Infinity},
+      {label:'1.000–10.000', lo:1000, hi:10000},
+      {label:'300–1.000', lo:300, hi:1000},
+      {label:'100–300', lo:100, hi:300},
+      {label:'0–100', lo:0, hi:100}
+    ];
+    const bucketOf = v => { const b = VOL_BUCKETS.find(x => v>=x.lo && v<x.hi); return b ? b.label : '0–100'; };
+    const PIV_DIMS = [
+      {key:'g', label:'Çatı Kategori'}, {key:'c', label:'Kategori'},
+      {key:'ft', label:'Filtre Tipi'}, {key:'fa', label:'Filtre Adı'},
+      {key:'x', label:'Cinsiyet'}, {key:'b', label:'Marka'}
+    ];
+    const dimLabel = key => (PIV_DIMS.find(d=>d.key===key)||{}).label || key;
 
     // Pre-scope (kat1 + kategori) — drives dependent dropdown options
     const preScope = useMemo(() => {
@@ -3111,7 +3140,7 @@ window.TABS = (function(){
 
     // Final scoped set
     const scoped = useMemo(() => {
-      const s1=setOf(fKat1), sK=setOf(fKat), sFt=setOf(fFt), sM=setOf(fMarka), sC=setOf(fCins);
+      const s1=setOf(fKat1), sK=setOf(fKat), sFt=setOf(fFt), sM=setOf(fMarka), sC=setOf(fCins), sB=setOf(fBucket);
       const ql = q.trim().toLowerCase();
       return KW.filter(k => {
         if (s1 && !s1.has(k.g)) return false;
@@ -3119,43 +3148,66 @@ window.TABS = (function(){
         if (sFt && !sFt.has(k.ft)) return false;
         if (sM && !sM.has(k.b)) return false;
         if (sC && !sC.has(k.x)) return false;
+        if (sB && !sB.has(bucketOf(k.v))) return false;
         if (ql && !k.kw.includes(ql)) return false;
         return true;
       });
-    }, [fKat1, fKat, fFt, fMarka, fCins, q]);
+    }, [fKat1, fKat, fFt, fMarka, fCins, fBucket, q]);
 
-    useEffect(() => setPage(0), [scoped, sort]);
+    const hasFilter = fKat1.length||fKat.length||fFt.length||fMarka.length||fCins.length||fBucket.length||q;
+    const clearAll = () => { setFKat1([]); setFKat([]); setFFt([]); setFMarka([]); setFCins([]); setFBucket([]); setQ(''); };
 
-    const hasFilter = fKat1.length||fKat.length||fFt.length||fMarka.length||fCins.length||q;
-    const clearAll = () => { setFKat1([]); setFKat([]); setFFt([]); setFMarka([]); setFCins([]); setQ(''); };
-
-    // ---- Aggregations ----
+    // ---- Core aggregations ----
     const totalVol = useMemo(() => scoped.reduce((a,k)=>a+k.v,0), [scoped]);
     const agg12 = useMemo(() => { const a=new Array(12).fill(0); for(const k of scoped) for(let i=0;i<12;i++) a[i]+=k.m[i]; return a; }, [scoped]);
+    const agg24 = useMemo(() => { const a=new Array(12).fill(0); for(const k of scoped) for(let i=0;i<12;i++) a[i]+=(k.m24?k.m24[i]:0); return a; }, [scoped]);
+    const agg25 = useMemo(() => { const a=new Array(12).fill(0); for(const k of scoped) for(let i=0;i<12;i++) a[i]+=(k.m25?k.m25[i]:0); return a; }, [scoped]);
+    const agg26 = useMemo(() => { const a=new Array(12).fill(null); for(let i=0;i<5;i++){ let s=0; for(const k of scoped) s+=(k.m26?k.m26[i]:0); a[i]=s; } return a; }, [scoped]); // 2026 Oca-May (kısmi)
     const peakIdx = agg12.indexOf(Math.max(...agg12, 0));
+    const peak25 = agg25.indexOf(Math.max(...agg25, 0));
     const nKat = useMemo(()=> new Set(scoped.map(k=>k.c)).size, [scoped]);
     const nMarka = useMemo(()=> new Set(scoped.filter(k=>k.b).map(k=>k.b)).size, [scoped]);
+    const n300 = useMemo(()=> scoped.reduce((a,k)=>a+(k.v>=300?1:0),0), [scoped]);
 
-    // Drill level: kategori columns when a Kat1 picked, else Kat1 groups
-    const drillToCat = fKat1.length >= 1;
-    const rowKeyOf = k => drillToCat ? k.c : k.g;
+    // Filtre tipi dağılımı (sağ üst chart)
+    const ftRank = useMemo(() => {
+      const m={}; for(const k of scoped){ if(!k.ft) continue; m[k.ft]=(m[k.ft]||0)+k.v; }
+      return Object.entries(m).map(([ft,v])=>({label:ft, value:v})).sort((a,b)=>b.value-a.value).slice(0,10);
+    }, [scoped]);
 
-    // ---- Season calendar rows ----
-    const calRows = useMemo(() => {
-      const map = {};
-      for (const k of scoped) {
-        const key = rowKeyOf(k);
-        if (!map[key]) map[key] = { label:key, group: drillToCat ? catGroup(key) : key, values:new Array(12).fill(0), total:0 };
-        for (let i=0;i<12;i++) map[key].values[i]+=k.m[i];
-        map[key].total += k.v;
+    // Sezon takvimi — kategori modu VEYA seçili kategorinin alt varyasyon (keyword) modu
+    const sortSeason = (rows) => {
+      if(seasonSort==='hacim') rows.sort((a,b)=>b.s25-a.s25);
+      else if(seasonSort==='yoy') rows.sort((a,b)=>(b.yoyTot==null?-Infinity:b.yoyTot)-(a.yoyTot==null?-Infinity:a.yoyTot));
+      else rows.sort((a,b)=>a.label.localeCompare(b.label,'tr'));
+      return rows;
+    };
+    const seasonData = useMemo(() => {
+      if (seasonFocus) {
+        const kws = scoped.filter(k => k.c === seasonFocus);
+        if (kws.length) {
+          const rows = kws.map(k => {
+            const v25=k.m25||new Array(12).fill(0), v24=k.m24||new Array(12).fill(0);
+            const s25=v25.reduce((a,b)=>a+b,0), s24=v24.reduce((a,b)=>a+b,0);
+            return { label:k.kw, g:catGroup(k.c), kwRef:k, v25, v24, peakIdx:v25.indexOf(Math.max(...v25)), mn:Math.min(...v25), mx:Math.max(...v25), yoyTot:s24>0?(s25-s24)/s24:null, s25 };
+          });
+          return { mode:'focus', rows: sortSeason(rows).slice(0,60) };
+        }
       }
-      return Object.values(map)
-        .map(r => ({...r, peakIdx: r.values.indexOf(Math.max(...r.values)), sub: U.fmtNum(r.total)+' / ay'}))
-        .sort((a,b)=>b.total-a.total)
-        .slice(0, 18);
-    }, [scoped, drillToCat]);
+      const map={};
+      for(const k of scoped){ const key=k.c; if(!map[key]) map[key]={label:key, c:key, g:catGroup(key), v25:new Array(12).fill(0), v24:new Array(12).fill(0)};
+        for(let i=0;i<12;i++){ map[key].v25[i]+=(k.m25?k.m25[i]:0); map[key].v24[i]+=(k.m24?k.m24[i]:0); } }
+      const rows=Object.values(map).map(r=>{ const s25=r.v25.reduce((a,b)=>a+b,0), s24=r.v24.reduce((a,b)=>a+b,0);
+        return {...r, peakIdx:r.v25.indexOf(Math.max(...r.v25)), mn:Math.min(...r.v25), mx:Math.max(...r.v25), yoyTot:s24>0?(s25-s24)/s24:null, s25}; });
+      return { mode:'cat', rows: sortSeason(rows) };
+    }, [scoped, seasonSort, seasonFocus]);
+    const seasonRows = seasonData.rows;
+    const seasonMode = seasonData.mode;
+    useEffect(()=>{ if(seasonFocus && !scoped.some(k=>k.c===seasonFocus)) setSeasonFocus(null); }, [scoped, seasonFocus]);
 
-    // ---- Marka × (Kat1|Kategori) matrix ----
+    // Marka × (Çatı|Kategori) matrix
+    const drillToCat = fKat1.length >= 1;
+    const levelLabel = drillToCat ? 'Kategori' : 'Çatı Kategori';
     const matrix = useMemo(() => {
       const brandMap = {}, colSet = new Set(), colParent = {};
       for (const k of scoped) {
@@ -3171,39 +3223,58 @@ window.TABS = (function(){
       return { brands, cols, colParent, rowMax: brands.map(b=>Math.max(1,...cols.map(c=>b.cells[c]||0))) };
     }, [scoped, drillToCat]);
 
-    // ---- Insights ----
-    const ftRank = useMemo(() => {
-      const m={}; for(const k of scoped){ if(!k.ft) continue; m[k.ft]=(m[k.ft]||0)+k.v; }
-      return Object.entries(m).map(([ft,v])=>({ft,v})).sort((a,b)=>b.v-a.v).slice(0,8);
-    }, [scoped]);
-    const seasonalCats = useMemo(() => {
-      const m={};
-      for(const k of scoped){ const key=k.c; if(!m[key]) m[key]={c:key, vals:new Array(12).fill(0), tot:0}; for(let i=0;i<12;i++) m[key].vals[i]+=k.m[i]; m[key].tot+=k.v; }
-      return Object.values(m).filter(r=>r.tot>0).map(r=>{
-        const mean=r.vals.reduce((a,b)=>a+b,0)/12, mx=Math.max(...r.vals);
-        const pIdx=r.vals.indexOf(mx);
-        return {c:r.c, tot:r.tot, ratio: mean>0? mx/mean : 0, peak:pIdx};
-      }).sort((a,b)=>b.ratio-a.ratio).slice(0,6);
-    }, [scoped]);
+    // Pivot tablo
+    const pivot = useMemo(() => {
+      const rowMap={}, colTot={};
+      for(const k of scoped){
+        const rk = (k[pivRow]||'(yok)'), ck = (k[pivCol]||'(yok)');
+        if(!rowMap[rk]) rowMap[rk]={key:rk, tot:0, cells:{}};
+        rowMap[rk].tot+=k.v; rowMap[rk].cells[ck]=(rowMap[rk].cells[ck]||0)+k.v;
+        colTot[ck]=(colTot[ck]||0)+k.v;
+      }
+      const rowsAll=Object.values(rowMap).sort((a,b)=>b.tot-a.tot);
+      const colsAll=Object.entries(colTot).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+      const rows=rowsAll.slice(0,25), cols=colsAll.slice(0,12);
+      return { rows, cols, rowMax:rows.map(r=>Math.max(1,...cols.map(c=>r.cells[c]||0))), moreRows:rowsAll.length-rows.length, moreCols:colsAll.length-cols.length, colTotals:cols.map(c=>colTot[c]) };
+    }, [scoped, pivRow, pivCol]);
 
-    // ---- Keyword table ----
+    // ---- Keyword table (kendi local filtreleriyle) ----
+    const tableScoped = useMemo(() => {
+      const sC=setOf(tCat), sF=setOf(tFt), sB=setOf(tBucket); const ql=tq.trim().toLowerCase();
+      return scoped.filter(k => {
+        if(sC && !sC.has(k.c)) return false;
+        if(sF && !sF.has(k.ft)) return false;
+        if(sB && !sB.has(bucketOf(k.v))) return false;
+        if(ql && !k.kw.includes(ql) && !(k.b && k.b.toLowerCase().includes(ql))) return false;
+        return true;
+      });
+    }, [scoped, tCat, tFt, tBucket, tq]);
+
+    const STR_KEYS = ['kw','c','g','b','ft','fa','x'];
     const sorted = useMemo(() => {
-      const arr=[...scoped];
-      const {k,d}=sort;
+      const arr=[...tableScoped]; const {k:sk,d}=sort; const isStr=STR_KEYS.includes(sk);
       arr.sort((a,b)=>{
-        let va=a[k], vb=b[k];
-        if (k==='kw'||k==='c'||k==='b'||k==='ft'||k==='fa'||k==='x') { va=(va||'').toString(); vb=(vb||'').toString(); return d*va.localeCompare(vb,'tr'); }
+        let va=a[sk], vb=b[sk];
+        if (isStr) {
+          va=(va||'').toString(); vb=(vb||'').toString();
+          if(!va&&vb) return 1; if(va&&!vb) return -1; if(!va&&!vb) return 0;   // boşlar daima sonda
+          return d*va.localeCompare(vb,'tr');
+        }
         va=va==null?-Infinity:va; vb=vb==null?-Infinity:vb;
         return d*(va-vb);
       });
       return arr;
-    }, [scoped, sort]);
+    }, [tableScoped, sort]);
+    useEffect(()=>setPage(0), [sorted]);
     const pageRows = sorted.slice(page*PAGE, page*PAGE+PAGE);
-    const pageCount = Math.ceil(sorted.length/PAGE);
-    const th = (key,label,align='left') => h('th',{
-      onClick:()=>setSort(s=>({k:key, d: s.k===key? -s.d : (key==='kw'||key==='c'||key==='b'||key==='ft'||key==='fa'||key==='x'?1:-1)})),
-      style:{cursor:'pointer', textAlign:align, whiteSpace:'nowrap'}
-    }, label, sort.k===key ? (sort.d<0?' ↓':' ↑') : '');
+    const pageCount = Math.ceil(sorted.length/PAGE) || 1;
+    const th = (key,label,align) => {
+      const isStr = STR_KEYS.includes(key);
+      return h('th',{
+        onClick:()=>setSort(s=>({k:key, d: s.k===key? -s.d : (isStr?1:-1)})),
+        style:{cursor:'pointer', textAlign:align==='right'?'right':'left', whiteSpace:'nowrap', userSelect:'none'}
+      }, label, h('span',{style:{opacity: sort.k===key?1:.25, marginLeft:3, fontSize:9}}, sort.k===key ? (sort.d<0?'▼':'▲') : '↕'));
+    };
 
     const matrixClick = (brand, col) => {
       setFMarka([brand]);
@@ -3214,55 +3285,116 @@ window.TABS = (function(){
     const calIcon = h('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
       h('rect',{x:3,y:4,width:18,height:18,rx:2}),h('line',{x1:16,y1:2,x2:16,y2:6}),h('line',{x1:8,y1:2,x2:8,y2:6}),h('line',{x1:3,y1:10,x2:21,y2:10}));
 
-    const levelLabel = drillToCat ? 'Kategori' : 'Kategori (Kat 1)';
+    const tCatOpts = [...new Set(scoped.map(k=>k.c))].sort((a,b)=>a.localeCompare(b,'tr'));
+    const tFtOpts = [...new Set(scoped.map(k=>k.ft).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'));
+    const bucketLabels = VOL_BUCKETS.map(b=>b.label);
+
+    // KPI yardımcı
+    const kpi = (label,value,sub,accent) => h(Kpi,{label,value,sub,accent});
 
     return h('div',{className:'tab-content-anim'},
       h(SectionHeader, {
         icon: calIcon, accent:'coral',
         title:'Planlanan Kategoriler & Filtreler',
-        desc:'Kategori × filtre × marka × cinsiyet kırılımlarının arama hacmi, mevsimselliği ve marka dağılımı. Üstteki global filtreden bağımsız, kendi filtreleriyle çalışır.'
+        desc:'Çatı kategori × kategori × filtre × marka × cinsiyet kırılımlarının arama hacmi, mevsimselliği ve marka dağılımı. Global filtreden bağımsız, kendi filtreleriyle çalışır.'
       }),
 
-      // Filter bar
+      // ===== Üst filtre barı =====
       h('div',{className:'card', style:{padding:'12px 14px', marginBottom:16, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center'}},
-        h(window.C.MultiSelect, {label:'Kat 1', options:P.kat1Groups, selected:fKat1, onChange:(s)=>{ setFKat1(s); setFKat(prev=>prev.filter(c=> !s.length || s.includes(catGroup(c)))); }, colorMap:P.kat1Colors, width:170}),
-        h(window.C.MultiSelect, {label:'Kategori', options:catOptions, selected:fKat, onChange:setFKat, width:170}),
-        h(window.C.MultiSelect, {label:'Filtre Tipi', options:ftOptions, selected:fFt, onChange:setFFt, width:160}),
-        h(window.C.MultiSelect, {label:'Marka', options:markaOptions, selected:fMarka, onChange:setFMarka, width:160}),
-        h(window.C.MultiSelect, {label:'Cinsiyet', options:cinsOptions, selected:fCins, onChange:setFCins, width:150}),
+        h(window.C.MultiSelect, {label:'Çatı Kategori', options:P.kat1Groups, selected:fKat1, onChange:(s)=>{ setFKat1(s); setFKat(prev=>prev.filter(c=> !s.length || s.includes(catGroup(c)))); }, colorMap:P.kat1Colors, width:175}),
+        h(window.C.MultiSelect, {label:'Kategori', options:catOptions, selected:fKat, onChange:setFKat, width:165}),
+        h(window.C.MultiSelect, {label:'Filtre Tipi', options:ftOptions, selected:fFt, onChange:setFFt, width:155}),
+        h(window.C.MultiSelect, {label:'Marka', options:markaOptions, selected:fMarka, onChange:setFMarka, width:150}),
+        h(window.C.MultiSelect, {label:'Cinsiyet', options:cinsOptions, selected:fCins, onChange:setFCins, width:140}),
+        h(window.C.MultiSelect, {label:'Hacim Aralığı', options:bucketLabels, selected:fBucket, onChange:setFBucket, width:160, searchable:false}),
         h('input',{type:'text', value:q, onChange:e=>setQ(e.target.value), placeholder:'Arama ifadesi ara…',
-          style:{flex:1, minWidth:160, padding:'7px 11px', fontSize:13, border:'1px solid var(--line)', borderRadius:7, background:'var(--bg)', color:'var(--ink)', outline:'none'}}),
+          style:{flex:1, minWidth:150, padding:'7px 11px', fontSize:13, border:'1px solid var(--line)', borderRadius:7, background:'var(--bg)', color:'var(--ink)', outline:'none'}}),
         hasFilter && h('button',{className:'ctrl', onClick:clearAll, style:{whiteSpace:'nowrap'}}, '✕ Temizle')
       ),
 
-      // KPIs
-      h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
-        h(Kpi,{label:'Keyword (kırılım)', value:U.fmtNum(scoped.length), sub:'arama ifadesi', accent:true}),
-        h(Kpi,{label:'Toplam Aylık Hacim', value:U.fmtNum(totalVol), sub:'tüm kırılımlar (örtüşmeli)'}),
-        h(Kpi,{label:'Kategori', value:nKat, sub:'aktif kategori'}),
-        h(Kpi,{label:'Marka', value:U.fmtNum(nMarka), sub:'aktif marka'}),
-        h(Kpi,{label:'Peak Ay', value: totalVol>0 ? U.TR_MONTHS_LONG[peakIdx] : '–', sub:'toplam talebin zirvesi'})
+      // ===== KPI'lar (6) =====
+      h('div',{className:'grid grid-kpi kpi-6', style:{marginBottom:18}},
+        kpi('Açılabilir Sayfa', U.fmtNum(scoped.length), '/ '+U.fmtNum(P.totalCross)+' toplam çapraz', true),
+        kpi('Hacim ≥ 300', U.fmtNum(n300), 'aylık 300+ kırılım'),
+        kpi('Toplam Aylık Hacim', U.fmtNum(totalVol), 'tüm kırılımlar (örtüşmeli)'),
+        kpi('Kategori', nKat + ' / 69', 'aktif kategori'),
+        kpi('Marka', U.fmtNum(nMarka), 'aktif marka'),
+        kpi('Peak Ay', totalVol>0 ? U.TR_MONTHS_LONG[peakIdx] : '–', 'toplam talebin zirvesi')
       ),
 
-      // Season calendar
-      h('div',{className:'card', style:{marginBottom:18}},
-        h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
-          h('h3',{style:{flex:1, minWidth:240}}, 'Sezon Takvimi · ' + (drillToCat?'Kategori':'Kat 1') + ' × Ay',
-            h(InfoIcon,null, h('strong',null,'Ne gösterir? '),'Her satırın 12 aylık ortalama arama hacmi (2024-2026 takvim ayı ortalaması). Satır-normalize renk: koyu = o ',(drillToCat?'kategorinin':'grubun'),' zirve ayı. Kat 1 seçince kategorilere iner.')),
-          h('span',{className:'txt-3', style:{fontSize:11}}, calRows.length + ' satır'),
-          h(CopyButton,{getData:()=>({headers:['#', levelLabel, ...MONTHS, 'Toplam/ay'], rows:calRows.map((r,i)=>[i+1, r.label, ...r.values, r.total])})})
+      // ===== Üst özet: 12 aylık tablo (sol) + Filtre Tipi dağılımı (sağ) =====
+      h('div',{className:'grid grid-2', style:{marginBottom:18}},
+        h('div',{className:'card'},
+          h('div',{className:'card-header'}, h('h3',null,'12 Aylık Hacim Trendi',
+            h(InfoIcon,null,'Seçili kapsamdaki tüm kırılımların ay bazında toplam arama hacmi. Gri = 2024, coral = 2025, yeşil = 2026 (Oca-May, kısmi). Filtre değiştikçe dinamik güncellenir; nokta = 2025 peak ayı.'))),
+          h('div',{style:{padding:'8px 14px 14px'}},
+            totalVol>0 ? h(LineChart,{
+              series:[
+                {name:'2024', values:agg24, color:'#8A8A8A'},
+                {name:'2025', values:agg25, color:'var(--coral)', peakIdx:peak25},
+                {name:'2026', values:agg26, color:'#2E9E78'}
+              ],
+              legend:true, height:236
+            }) : h('div',{className:'txt-3', style:{padding:20, textAlign:'center'}}, 'Seçili filtrede veri yok.')
+          )
         ),
-        h('div',{style:{padding:'0 14px 14px'}},
-          calRows.length ? h(Heatmap,{rows:calRows, monthsLabels:MONTHS, showValues:true})
-                         : h('div',{className:'txt-3', style:{padding:20, textAlign:'center'}}, 'Seçili filtrede veri yok.')
+        h('div',{className:'card'},
+          h('div',{className:'card-header'}, h('h3',null,'Filtre Tipi Dağılımı',
+            h(InfoIcon,null,'Filtre tipi bazında toplam aylık arama hacmi. Hangi facet ekseninin (Renk, Kalıp, Bel…) en çok talep ürettiğini gösterir. Bara tıkla → o filtre tipini filtreye ekle.'))),
+          h('div',{style:{padding:'4px 14px 14px', maxHeight:272, overflowY:'auto'}},
+            ftRank.length ? h(ShareBars,{rows:ftRank, onClickRow:(lbl)=>setFFt(fFt.includes(lbl)?fFt.filter(x=>x!==lbl):[...fFt,lbl]), activeLabels:fFt}) : h('div',{className:'txt-3', style:{padding:12}}, 'Veri yok.')
+          )
         )
       ),
 
-      // Brand × Kategori matrix
+      // ===== Sezon Takvimi — kategori VEYA alt-varyasyon · 2025 hacmi + YoY rozeti =====
+      (() => { const focus = seasonMode==='focus';
+       const onCellClick = r => { if(focus){ if(r.kwRef) setModalKw(r.kwRef); } else { setSeasonFocus(r.label); } };
+       return h('div',{className:'card', style:{marginBottom:18}},
+        h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
+          h('h3',{style:{flex:1, minWidth:200, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}},
+            focus && h('button',{onClick:()=>setSeasonFocus(null), title:'Tüm kategorilere dön',
+              style:{padding:'2px 9px', fontSize:11, borderRadius:999, cursor:'pointer', border:'1px solid var(--line)', background:'var(--bg)', color:'var(--ink-2)', fontWeight:600}}, '‹ Tüm kategoriler'),
+            'Sezon Takvimi · ' + (focus ? seasonFocus + ' · Alt Varyasyonlar' : 'Kategori × Ay'),
+            h(InfoIcon,null, h('strong',null,'Ne gösterir? '),'Her hücrede üst: 2025 ortalama aylık arama hacmi, alt rozet: 2024 aynı aya göre YoY%. Renk satır-normalize: kırmızı (dip) → sarı (orta) → yeşil (peak). Çerçeve = yılın peak ayı.',h('br'),h('br'),h('strong',null,'Tıklama: '),'Kategoriye (satır/hücre) tıkla → o kategorinin alt filtre varyasyonları gelir. Varyasyona tıkla → keyword detayı.')),
+          h('div',{style:{display:'flex', gap:4}},
+            ...[['hacim','Hacim'],['yoy','YoY'],['az','A-Z']].map(([key,lbl])=>h('button',{key, onClick:()=>setSeasonSort(key),
+              style:{padding:'3px 10px', fontSize:11, borderRadius:999, cursor:'pointer', fontWeight:seasonSort===key?700:500,
+                border:'1px solid '+(seasonSort===key?'var(--coral)':'var(--line)'),
+                background:seasonSort===key?'color-mix(in srgb, var(--coral) 14%, var(--bg))':'var(--bg)',
+                color:seasonSort===key?'var(--coral-deep, var(--coral))':'var(--ink-2)'}}, lbl))),
+          h('span',{className:'txt-3', style:{fontSize:11}}, seasonRows.length + (focus?' varyasyon':' kategori')),
+          h(CopyButton,{getData:()=>({headers:[focus?'Varyasyon':'Kategori','Çatı', ...MONTHS.map(m=>m+' 2025'), 'YoY% (2024→2025)'], rows:seasonRows.map(r=>[r.label, r.g, ...r.v25, r.yoyTot==null?'':U.fmtPct(r.yoyTot)])})})
+        ),
+        seasonRows.length ? h('div',null,
+          h('div',{style:{overflow:'auto', padding:'0 14px 4px', maxHeight:520}},
+            h('div',{style:{display:'grid', gridTemplateColumns:`minmax(150px,200px) repeat(12, minmax(48px,1fr))`, gap:2, minWidth:'740px'}},
+              h('div',{style:{position:'sticky', top:0, left:0, zIndex:3, background:'var(--bg-card)', fontSize:9, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.06em', padding:'7px 6px'}}, focus?'Varyasyon':'Kategori'),
+              ...MONTHS.map((m,i)=>h('div',{key:'mh'+i, style:{position:'sticky', top:0, zIndex:2, background:'var(--bg-card)', fontSize:10, fontWeight:700, color:'var(--ink-3)', textAlign:'center', padding:'7px 0'}}, m)),
+              ...seasonRows.flatMap((r,ri)=>[
+                h('div',{key:'sl'+ri, className:'clickable', onClick:()=>onCellClick(r), title:(focus?r.label:r.label+' · '+r.g)+' — '+(focus?'keyword detayı':'alt varyasyonlar'), style:{position:'sticky', left:0, zIndex:1, background:'var(--bg-card)', display:'flex', alignItems:'center', gap:5, padding:'2px 6px', fontSize:11.5, fontWeight:500, cursor:'pointer', overflow:'hidden', borderTop: ri>0?'1px solid var(--line-soft)':'none'}},
+                  h('span',{style:{width:7, height:7, borderRadius:2, background:katColor1(r.g), flexShrink:0}}),
+                  h('span',{style:{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, r.label),
+                  !focus && h('span',{style:{marginLeft:'auto', color:'var(--ink-3)', fontSize:11, flexShrink:0}}, '›')),
+                ...r.v25.map((v,i)=>{ const t=(v-r.mn)/((r.mx-r.mn)||1); const isPeak=i===r.peakIdx;
+                  const pv=r.v24[i]; const yoy = pv>0 ? (v-pv)/pv : null; const tc=U.hmText(t);
+                  return h('div',{key:'sc'+ri+'_'+i, onClick:()=>onCellClick(r), title:`${r.label} · ${MONTHS[i]} 2025: ${U.fmtFull(v)}`+(yoy!=null?` · YoY ${U.fmtPct(yoy)}`:''),
+                    style:{height:38, borderRadius:3, background:U.hmColor(t), color:tc, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, cursor:'pointer', boxShadow: isPeak?'inset 0 0 0 2px var(--ink)':'none'}},
+                    h('span',{style:{fontSize:9.5, fontWeight:700, lineHeight:1}}, U.fmtNum(v)),
+                    yoy!=null && h('span',{style:{fontSize:8, fontWeight:600, lineHeight:1, opacity:.92}}, (yoy>=0?'+':'')+Math.round(yoy*100)+'%'));
+                })
+              ])
+            )
+          ),
+          h('div',{className:'txt-3', style:{fontSize:11, padding:'8px 14px 14px'}}, focus? h(React.Fragment,null,h('strong',null,seasonFocus),' kategorisinin alt filtre varyasyonları (2025 hacmi + YoY). Satıra tıkla → keyword detayı.') : h(React.Fragment,null,'Her hücrede ',h('strong',null,'üst'),': 2025 aylık hacmi, ',h('strong',null,'alt'),': YoY%. ',h('strong',null,'Bir kategoriye tıkla'),' → alt filtre varyasyonları açılır. Renk: ', h('span',{style:{color:'#e67c73', fontWeight:600}},'kırmızı (dip)'),' → ',h('span',{style:{color:'#d6a400', fontWeight:600}},'sarı'),' → ',h('span',{style:{color:'#57bb8a', fontWeight:600}},'yeşil (peak)'),'.'))
+        ) : h('div',{className:'txt-3', style:{padding:20, textAlign:'center'}}, 'Seçili filtrede veri yok.')
+      ); })(),
+
+      // ===== Marka × (Çatı|Kategori) Matris =====
       (matrix.brands.length>0 && matrix.cols.length>0) && h('div',{className:'card', style:{marginBottom:18}},
         h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
           h('h3',{style:{flex:1, minWidth:240}}, 'Marka × ' + levelLabel + ' Matris',
-            h(InfoIcon,null, h('strong',null,'Ne gösterir? '),'En yüksek hacimli ',matrix.brands.length,' markanın ', levelLabel.toLowerCase(),' bazında aylık arama hacmi. Satır-normalize renk her markanın güçlü olduğu kolonu vurgular. Hücreye tıkla → marka + kolon filtreye girer.',h('br'),h('br'),h('strong',null,'Drill: '),'Kat 1 filtresi seçince kolonlar kategorilere iner.')),
+            h(InfoIcon,null, h('strong',null,'Ne gösterir? '),'En yüksek hacimli ',matrix.brands.length,' markanın ', levelLabel.toLowerCase(),' bazında aylık arama hacmi. Satır-normalize renk her markanın güçlü olduğu kolonu vurgular. Hücreye tıkla → marka + kolon filtreye girer.',h('br'),h('br'),h('strong',null,'Drill: '),'Çatı Kategori filtresi seçince kolonlar kategorilere iner.')),
           h('span',{className:'txt-3', style:{fontSize:11}}, matrix.brands.length + ' marka × ' + matrix.cols.length + ' kolon'),
           h(CopyButton,{getData:()=>({headers:['#','Marka', ...matrix.cols, 'Toplam'], rows:matrix.brands.map((b,i)=>[i+1, b.brand, ...matrix.cols.map(c=>b.cells[c]||0), b.total])})})
         ),
@@ -3290,53 +3422,83 @@ window.TABS = (function(){
         )
       ),
 
-      // Insights row
-      h('div',{className:'grid-2', style:{marginBottom:18}},
-        h('div',{className:'card'},
-          h('div',{className:'card-header'}, h('h3',null,'En Mevsimsel Kategoriler', h(InfoIcon,null,'Zirve ay hacmi / yıl ortalaması oranı en yüksek kategoriler. Yüksek oran = belirgin sezonsallık.'))),
-          h('div',{style:{padding:'4px 14px 14px'}},
-            seasonalCats.length ? seasonalCats.map((r,i)=>h('div',{key:i, style:{display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderTop:i>0?'1px solid var(--line)':'none'}},
-              h('span',{style:{width:18, color:'var(--ink-3)', fontSize:12}}, (i+1)),
-              h('span',{style:{width:9, height:9, borderRadius:3, background:katColor1(catGroup(r.c)), flexShrink:0}}),
-              h('span',{style:{flex:1, fontWeight:600, fontSize:13}}, r.c),
-              h('span',{className:'pill neu', style:{fontSize:10}}, 'Zirve: '+U.TR_MONTHS[r.peak]),
-              h('span',{style:{fontWeight:700, fontSize:13, color:'var(--coral)'}}, '×'+r.ratio.toFixed(1))
-            )) : h('div',{className:'txt-3', style:{padding:12}}, 'Veri yok.')
-          )
+      // ===== Pivot Tablo =====
+      h('div',{className:'card', style:{marginBottom:18}},
+        h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
+          h('h3',{style:{flex:1, minWidth:200}}, 'Pivot Tablo',
+            h(InfoIcon,null,'Seçtiğin iki boyutu çaprazlar; hücre = toplam aylık arama hacmi. Satır-normalize renk her satırın en güçlü kolonunu vurgular.')),
+          h('div',{style:{display:'flex', alignItems:'center', gap:6, fontSize:12}},
+            h('span',{className:'txt-3'},'Satır:'),
+            h('select',{value:pivRow, onChange:e=>setPivRow(e.target.value), className:'piv-select', style:{padding:'5px 8px', fontSize:12, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)'}},
+              PIV_DIMS.map(d=>h('option',{key:d.key, value:d.key}, d.label))),
+            h('span',{className:'txt-3'},'Kolon:'),
+            h('select',{value:pivCol, onChange:e=>setPivCol(e.target.value), className:'piv-select', style:{padding:'5px 8px', fontSize:12, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)'}},
+              PIV_DIMS.map(d=>h('option',{key:d.key, value:d.key}, d.label)))
+          ),
+          h(CopyButton,{getData:()=>({headers:[dimLabel(pivRow), ...pivot.cols, 'Toplam'], rows:pivot.rows.map(r=>[r.key, ...pivot.cols.map(c=>r.cells[c]||0), r.tot])})})
         ),
-        h('div',{className:'card'},
-          h('div',{className:'card-header'}, h('h3',null,'En Yüksek Hacimli Filtre Tipleri', h(InfoIcon,null,'Filtre tipi bazında toplam aylık arama hacmi (seçili kapsamda).'))),
-          h('div',{style:{padding:'4px 14px 14px'}},
-            ftRank.length ? h(ShareBars,{rows:ftRank.map(r=>({label:r.ft, value:r.v}))}) : h('div',{className:'txt-3', style:{padding:12}}, 'Veri yok.')
-          )
+        pivRow===pivCol ? h('div',{className:'txt-3', style:{padding:'14px'}}, 'Satır ve kolon farklı boyut olmalı.')
+        : h('div',{style:{overflow:'auto', padding:'0 14px 14px', maxHeight:520}},
+          h('div',{style:{display:'grid', gridTemplateColumns:`minmax(150px,200px) repeat(${pivot.cols.length}, minmax(70px,1fr)) minmax(78px,98px)`, gap:2, minWidth:(150+pivot.cols.length*70+78)+'px'}},
+            h('div',{style:{padding:'8px 6px', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, dimLabel(pivRow)+' \\ '+dimLabel(pivCol)),
+            ...pivot.cols.map(col=>h('div',{key:'ph'+col, title:col, style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'center', color:'var(--ink-2)', lineHeight:1.15, wordBreak:'break-word', borderBottom:'2px solid var(--coral)', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, col)),
+            h('div',{style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam'),
+            ...pivot.rows.flatMap((r,ri)=>[
+              h('div',{key:'pr'+ri, title:r.key, style:{padding:'6px 8px', fontSize:11.5, fontWeight:600, display:'flex', alignItems:'center', gap:5, minWidth:0, borderTop: ri>0?'1px solid var(--line)':'none', position:'sticky', left:0, background:'var(--bg-card)', zIndex:1}},
+                h('span',{style:{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, r.key)),
+              ...pivot.cols.map((col,ci)=>{ const v=r.cells[col]||0, intensity=v/pivot.rowMax[ri];
+                const bg = intensity>0 ? `color-mix(in srgb, var(--coral) ${Math.round(intensity*80+6)}%, var(--bg-card))` : 'var(--bg-card)';
+                return h('div',{key:'pc'+ri+'_'+ci, title:`${r.key} × ${col}: ${U.fmtFull(v)}`, style:{padding:'8px 4px', fontSize:10, fontWeight:600, textAlign:'center', background:bg, color:intensity>0.55?'#fff':'var(--ink-2)', borderRadius:3, borderTop:ri>0?'1px solid var(--line)':'none', minHeight:28, display:'flex', alignItems:'center', justifyContent:'center'}}, v>0?U.fmtNum(v):'·');
+              }),
+              h('div',{key:'pt'+ri, style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'right', color:'var(--ink-2)', borderTop:ri>0?'1px solid var(--line)':'none', display:'flex', alignItems:'center', justifyContent:'flex-end'}}, U.fmtNum(r.tot))
+            ])
+          ),
+          (pivot.moreRows>0 || pivot.moreCols>0) && h('div',{className:'txt-3', style:{fontSize:11, paddingTop:8}}, '+ '+(pivot.moreRows>0?pivot.moreRows+' satır':'')+(pivot.moreRows>0&&pivot.moreCols>0?', ':'')+(pivot.moreCols>0?pivot.moreCols+' kolon':'')+' gizli (top liste gösteriliyor)')
         )
       ),
 
-      // Keyword table
+      // ===== Keyword Listesi (kendi filtre barı + tablo) =====
       h('div',{className:'card', ref:tableRef},
         h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
           h('h3',{style:{flex:1, minWidth:200}}, 'Keyword Listesi'),
           h('span',{className:'txt-3', style:{fontSize:11}}, U.fmtFull(sorted.length)+' satır'),
-          h(CopyButton,{getData:()=>({headers:['Arama İfadesi','Kategori','Kat 1','Cinsiyet','Marka','Filtre Tipi','Filtre Adı','Aylık Hacim','YoY'], rows:sorted.slice(0,5000).map(k=>[k.kw,k.c,k.g,k.x,k.b,k.ft,k.fa,k.v, k.y==null?'':U.fmtPct(k.y)])})})
+          h(CopyButton,{getData:()=>({headers:['Arama İfadesi','Çatı Kategori','Kategori','Cinsiyet','Marka','Filtre Tipi','Filtre Adı','Aylık Hacim','YoY'], rows:sorted.slice(0,5000).map(k=>[k.kw,k.g,k.c,k.x,k.b,k.ft,k.fa,k.v, k.y==null?'':U.fmtPct(k.y)])})})
+        ),
+        // tablo-içi ikinci filtre alanı
+        h('div',{style:{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', padding:'0 14px 12px'}},
+          h('input',{type:'text', value:tq, onChange:e=>setTq(e.target.value), placeholder:'Bu listede ara (kelime / marka)…',
+            style:{flex:1, minWidth:180, padding:'6px 10px', fontSize:12.5, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)', outline:'none'}}),
+          h(window.C.MultiSelect, {label:'Kategori', options:tCatOpts, selected:tCat, onChange:setTCat, width:150}),
+          h(window.C.MultiSelect, {label:'Filtre Tipi', options:tFtOpts, selected:tFt, onChange:setTFt, width:150}),
+          h(window.C.MultiSelect, {label:'Hacim', options:bucketLabels, selected:tBucket, onChange:setTBucket, width:140, searchable:false}),
+          (tq||tCat.length||tFt.length||tBucket.length) && h('button',{className:'ctrl', onClick:()=>{ setTq(''); setTCat([]); setTFt([]); setTBucket([]); }}, '✕')
         ),
         h('div',{style:{overflow:'auto', padding:'0 6px'}},
-          h('table',{className:'tbl', style:{width:'100%', fontSize:12.5}},
+          h('table',{className:'tbl', style:{width:'100%', minWidth:'980px', fontSize:12.5, tableLayout:'fixed'}},
+            h('colgroup',null,
+              h('col',{style:{width:'20%'}}), h('col',{style:{width:'12%'}}), h('col',{style:{width:'9%'}}),
+              h('col',{style:{width:'11%'}}), h('col',{style:{width:'11%'}}), h('col',{style:{width:'12%'}}),
+              h('col',{style:{width:'8%'}}), h('col',{style:{width:'6%'}}), h('col',{style:{width:'7%'}}), h('col',{style:{width:'4%'}})),
             h('thead',null, h('tr',null,
               th('kw','Arama İfadesi'), th('c','Kategori'), th('x','Cinsiyet'), th('b','Marka'),
               th('ft','Filtre Tipi'), th('fa','Filtre Adı'), th('v','Aylık Hacim','right'), th('y','YoY','right'),
-              h('th',{style:{textAlign:'center'}},'Sezon')
+              h('th',{style:{textAlign:'center'}},'12 Ay'), h('th',{style:{textAlign:'center'}},'Peak')
             )),
-            h('tbody',null, pageRows.map((k,i)=>h('tr',{key:i},
-              h('td',{style:{fontWeight:600}}, k.kw),
-              h('td',null, h('span',{style:{display:'inline-flex', alignItems:'center', gap:5}}, h('span',{style:{width:8,height:8,borderRadius:2,background:katColor1(k.g)}}), k.c)),
-              h('td',{className:'txt-3'}, k.x||'–'),
-              h('td',null, k.b||'–'),
-              h('td',{className:'txt-3'}, k.ft||'–'),
-              h('td',null, k.fa||'–'),
-              h('td',{style:{textAlign:'right', fontWeight:700}, title:U.fmtFull(k.v)}, U.fmtNum(k.v)),
-              h('td',{style:{textAlign:'right'}}, k.y==null? h('span',{className:'txt-3'},'–') : h('span',{style:{color:k.y>0?'var(--green)':k.y<0?'var(--red)':'var(--ink-2)', fontWeight:600}}, U.fmtPct(k.y))),
-              h('td',{style:{textAlign:'center'}}, h(Sparkline,{values:k.m, w:74, h:22, color:katColor1(k.g)}))
-            )))
+            h('tbody',null, pageRows.map((k,i)=>{ const pk=k.m.indexOf(Math.max(...k.m));
+              const tdEll={overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'};
+              return h('tr',{key:i, className:'clickable', onClick:()=>setModalKw(k)},
+                h('td',{style:{...tdEll, fontWeight:600}, title:k.kw}, k.kw),
+                h('td',{style:tdEll, title:k.c+' · '+k.g}, h('span',{style:{display:'inline-flex', alignItems:'center', gap:5, maxWidth:'100%'}}, h('span',{style:{width:8,height:8,borderRadius:2,background:katColor1(k.g), flexShrink:0}}), h('span',{style:tdEll}, k.c))),
+                h('td',{className:'txt-3', style:tdEll}, k.x||'–'),
+                h('td',{style:tdEll, title:k.b}, k.b||'–'),
+                h('td',{className:'txt-3', style:tdEll}, k.ft||'–'),
+                h('td',{style:tdEll, title:k.fa}, k.fa||'–'),
+                h('td',{className:'num', style:{fontWeight:700}, title:U.fmtFull(k.v)}, U.fmtNum(k.v)),
+                h('td',{className:'num'}, k.y==null? h('span',{className:'txt-3'},'–') : h('span',{style:{color:k.y>0?'var(--green)':k.y<0?'var(--red)':'var(--ink-2)', fontWeight:600}}, U.fmtPct(k.y))),
+                h('td',{style:{textAlign:'center'}}, h(Sparkline,{values:k.m, w:66, h:20, color:katColor1(k.g)})),
+                h('td',{style:{textAlign:'center'}}, h('span',{className:'pill neu', style:{fontSize:10}}, U.TR_MONTHS[pk]))
+              );
+            }))
           )
         ),
         pageCount>1 && h('div',{style:{display:'flex', alignItems:'center', justifyContent:'center', gap:12, padding:'12px 0'}},
@@ -3344,7 +3506,56 @@ window.TABS = (function(){
           h('span',{className:'txt-3', style:{fontSize:12}}, (page+1)+' / '+pageCount),
           h('button',{className:'ctrl', disabled:page>=pageCount-1, onClick:()=>setPage(p=>Math.min(pageCount-1,p+1))}, 'Sonraki ›')
         )
-      )
+      ),
+
+      // ===== Keyword Modal =====
+      modalKw && (() => { const k=modalKw;
+        const seas = (k.m25 && k.m25.some(x=>x>0)) ? k.m25 : k.m;
+        const pk=seas.indexOf(Math.max(...seas)), dp=seas.indexOf(Math.min(...seas)); const cvv=cv(seas);
+        const m26pad = new Array(12).fill(null); if(k.m26) for(let i=0;i<k.m26.length;i++) m26pad[i]=k.m26[i];
+        const chip=(lbl,val,strong)=>h('div',{style:{display:'flex', flexDirection:'column', gap:2, padding:'8px 12px', background:'var(--line-soft)', borderRadius:8, minWidth:120}},
+          h('span',{style:{fontSize:9, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--ink-3)', fontWeight:700}}, lbl),
+          h('span',{style:{fontSize:13, fontWeight: strong?700:500, color: strong?'var(--coral)':'var(--ink)'}}, val));
+        return h(Modal,{onClose:()=>setModalKw(null)},
+          h('div',null,
+            h('div',{className:'lbl-cat'}, k.g + ' › ' + k.c),
+            h('h1',{style:{fontSize:26, marginBottom:14}}, k.kw),
+            h('div',{style:{display:'flex', gap:20, marginBottom:18, flexWrap:'wrap'}},
+              h('div',null, h('div',{className:'lbl-cat'},'2026 Ort. (aylık)'), h('div',{className:'num', style:{fontSize:20, fontWeight:600}}, U.fmtFull(k.v))),
+              h('div',null, h('div',{className:'lbl-cat'},'YoY (2024→2025)'), h('div',{style:{fontSize:20}}, k.y==null?'–':h(YoYPill,{yoy:k.y}))),
+              h('div',null, h('div',{className:'lbl-cat'},'Hacim Bandı'), h('div',{style:{fontSize:15, fontWeight:600}}, bucketOf(k.v))),
+              h('div',null, h('div',{className:'lbl-cat'},'CV (Mevsimsellik)'), h('div',{className:'num', style:{fontSize:20, fontWeight:600}}, cvv.toFixed(2).replace('.',',')))
+            ),
+            h('div',{style:{display:'flex', flexWrap:'wrap', gap:8, marginBottom:18}},
+              chip('Çatı Kategori', k.g, true),
+              chip('Kategori', k.c, true),
+              chip('Cinsiyet', k.x||'Jenerik'),
+              chip('Marka', k.b||'Markasız'),
+              chip('Filtre Tipi', k.ft||'—'),
+              chip('Filtre Adı (Değer)', k.fa||'—')
+            ),
+            h('div',{style:{marginBottom:16}},
+              h('h3',{style:{marginBottom:10}},'Aylık Arama Hacmi · 2024–2026'),
+              h(LineChart,{series:[
+                {name:'2024', values:k.m24||new Array(12).fill(0), color:'#8A8A8A'},
+                {name:'2025', values:k.m25||new Array(12).fill(0), color:'#FF7B52', peakIdx:pk},
+                {name:'2026', values:m26pad, color:'#2E9E78'}
+              ], legend:true, height:230})
+            ),
+            h('div',{className:'grid grid-2', style:{marginBottom:16}},
+              h('div',null, h('div',{className:'lbl-cat'},'Peak ay (2025)'), h('div',{style:{fontSize:15, fontWeight:600}}, TR_MONTHS_LONG[pk], ' · ', h('span',{className:'num'}, U.fmtFull(seas[pk])))),
+              h('div',null, h('div',{className:'lbl-cat'},'Dip ay (2025)'), h('div',{style:{fontSize:15, fontWeight:600}}, TR_MONTHS_LONG[dp], ' · ', h('span',{className:'num'}, U.fmtFull(seas[dp]))))
+            ),
+            h('div',{style:{fontSize:13, color:'var(--ink-2)', lineHeight:1.6, background:'var(--line-soft)', padding:14, borderRadius:8, display:'flex', gap:10, alignItems:'flex-start'}},
+              h('span',{style:{color:'var(--coral)', paddingTop:2, flexShrink:0}}, I.Bulb(16)),
+              h('div',null, h('strong',null,'Aksiyon: '),
+                cvv>0.3 ? `Yüksek mevsimsel kırılım. Bu facet sayfası ${TR_MONTHS_LONG[pk]} zirvesinden 4-6 hafta önce hazır olmalı.`
+                : cvv>0.15 ? `Orta mevsimsel. ${TR_MONTHS_LONG[pk]} civarı öne çıkıyor; evergreen + sezonsal boost kombinasyonu uygun.`
+                : `Evergreen kırılım. Yıl boyu hacim var; sürekli güncel tutulması önerilir.`)
+            )
+          )
+        );
+      })()
     );
   }
 
