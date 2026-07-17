@@ -10,6 +10,7 @@
     "start": "node server.js",
     "build": "node scripts/build-data.js",
     "build:planned": "node scripts/build-planned.js",
+    "merge": "node scripts/merge-2026.js",
     "test": "node --test scripts/build-data.test.js"
   },
   "dependencies": {

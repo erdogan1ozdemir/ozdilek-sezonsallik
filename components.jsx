@@ -96,7 +96,7 @@ window.C = (function(){
     if (yoy == null || isNaN(yoy)) return h('span',{className:'pill neu', title: tip || type}, '–');
     const cls = yoy > 0.02 ? 'pos' : yoy < -0.02 ? 'neg' : 'neu';
     const icon = yoy > 0.02 ? '↑' : yoy < -0.02 ? '↓' : '→';
-    const title = tip || `${type}: ${fmtPct(yoy, 1)} ${type === 'YoY' ? '(2024 → 2025)' : type === 'MoM' ? '(önceki aya göre)' : ''}`.trim();
+    const title = tip || `${type}: ${fmtPct(yoy, 1)} ${type === 'YoY' ? '(Önceki 12 Ay → Son 12 Ay)' : type === 'MoM' ? '(önceki aya göre)' : ''}`.trim();
     return h('span',{className:'pill '+cls, title}, icon+' '+fmtPct(yoy, 0));
   }
 
@@ -111,13 +111,17 @@ window.C = (function(){
   }
 
   // Heatmap with hover-value label
-  function Heatmap({rows, monthsLabels=TR_MONTHS, onClickCell, showPeakDot=true, showValues=true, year=null, showYoY=false}) {
+  // periodLabel/prevLabel: tooltip labels for the value and comparison series
+  // (e.g. 'Son 12 Ay' / 'Önceki 12 Ay'); legacy `year` prop still accepted.
+  function Heatmap({rows, monthsLabels=TR_MONTHS, onClickCell, showPeakDot=true, showValues=true, year=null, periodLabel=null, prevLabel=null, showYoY=false}) {
     const [hover, setHover] = React.useState(null); // { ri, i, x, y, row, v, prev, yoy, isPeak }
     const hostRef = React.useRef(null);
     const grid = [];
     // Corner - show year label if provided
+    const valLabel = periodLabel || year || 'Son 12 Ay';
+    const cmpLabel = prevLabel || (year ? year - 1 : 'Önceki 12 Ay');
     grid.push(h('div',{className:'hm-head hm-corner', key:'corner'},
-      year != null && h('span',{className:'hm-year'}, year)
+      (periodLabel || year) != null && h('span',{className:'hm-year'}, periodLabel || year)
     ));
     monthsLabels.forEach((m,i) => grid.push(h('div',{key:'h'+i, className:'hm-head'}, m)));
     rows.forEach((row, ri) => {
@@ -168,11 +172,11 @@ window.C = (function(){
         ),
         h('div',{className:'hm-tt-metrics'},
           h('div',{className:'hm-tt-metric'},
-            h('div',{className:'hm-tt-m-label'}, year || '2025'),
+            h('div',{className:'hm-tt-m-label'}, valLabel),
             h('div',{className:'hm-tt-m-val'}, fmtFull(hover.v))
           ),
           hover.prev != null && h('div',{className:'hm-tt-metric'},
-            h('div',{className:'hm-tt-m-label'}, (year ? year-1 : 2024)),
+            h('div',{className:'hm-tt-m-label'}, cmpLabel),
             h('div',{className:'hm-tt-m-val', style:{color:'var(--ink-3)'}}, fmtFull(hover.prev))
           ),
           hover.yoy != null && h('div',{className:'hm-tt-metric'},
@@ -182,7 +186,7 @@ window.C = (function(){
             )
           )
         ),
-        hover.isPeak && h('div',{className:'hm-tt-footer'}, '★ Yılın peak ayı')
+        hover.isPeak && h('div',{className:'hm-tt-footer'}, '★ Dönemin peak ayı')
       )
     );
   }
@@ -367,17 +371,25 @@ window.C = (function(){
         hoverI != null && h('line',{x1:xs[hoverI], x2:xs[hoverI], y1:pad.t, y2:pad.t+ch, stroke:'var(--ink-3)', strokeDasharray:'3 3'})
       ),
       // Tooltip panel - portal to body so it escapes chart clipping and sticky headers
+      // Seriler en yeniden eskiye doğru listelenir (Son 12 Ay üstte, Önceki 12 Ay altta).
+      // Her satır kendi dönem etiketini taşır (s.pointLabels: ['Tem 25', …]); yoksa
+      // ortak eksen etiketi başlıkta gösterilir.
       hoverI != null && (() => {
         const r = svgRef.current?.getBoundingClientRect();
         if (!r) return null;
         const anchorX = r.left + (xs[hoverI] / w) * r.width;
         const anchorY = r.top + (pad.t / height) * r.height;
+        const hasPointLabels = series.some(s => s.pointLabels);
+        const ordered = [...series].reverse();
         return h(FloatingTooltip, { x: anchorX, y: anchorY, placement: 'top' },
-          h('div',{style:{fontWeight:600, marginBottom:2}}, labels[hoverI]),
-          series.map((s,i) => h('div',{key:i, style:{display:'flex',alignItems:'center',gap:6,fontSize:11}},
-            h('div',{style:{width:8,height:8,borderRadius:2,background:s.color||'var(--accent)'}}),
-            h('span',{style:{color:'var(--ink-2)'}}, s.name+': '),
-            h('span',{className:'num',style:{fontWeight:600}}, yFormat(s.values?.[hoverI]))
+          !hasPointLabels && h('div',{style:{fontWeight:600, marginBottom:2}}, labels[hoverI]),
+          ordered.map((s,i) => h('div',{key:i, style:{display:'flex',alignItems:'center',gap:6,fontSize:11}},
+            h('div',{style:{width:8,height:8,borderRadius:2,background:s.color||'var(--accent)', flexShrink:0}}),
+            hasPointLabels
+              ? h('span',{style:{fontWeight:600}}, (s.pointLabels?.[hoverI] || labels[hoverI]) + ': ')
+              : h('span',{style:{color:'var(--ink-2)'}}, s.name+': '),
+            h('span',{className:'num',style:{fontWeight:600}}, yFormat(s.values?.[hoverI])),
+            hasPointLabels && s.name && h('span',{style:{color:'var(--ink-3)', fontSize:10, marginLeft:2}}, s.shortName || s.name)
           ))
         );
       })()

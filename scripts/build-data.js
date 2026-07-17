@@ -125,6 +125,20 @@ function parseSezonsallik(sheet, sheetName) {
     throw new Error(`${sheetName}: expected 12 month columns between "En Yuksek Ay?" and "Bucket", got ${m24End - m24Start}`);
   }
   const m25Start = iBucket + 1;
+  // Rolling block: 2026 month columns sit between the 2025 block and "R12 Avg"
+  const iR12 = mustCol(H, 'R12 Avg', sheetName);
+  const iP12 = mustCol(H, 'P12 Avg', sheetName);
+  const iRYoY = mustCol(H, 'R12 YoY', sheetName);
+  const iRQ1 = mustCol(H, 'R12 \nQ1 Peak', sheetName);
+  const iRQ2 = mustCol(H, 'R12 \nQ2 Peak', sheetName);
+  const iRQ3 = mustCol(H, 'R12 \nQ3 Peak', sheetName);
+  const iRQ4 = mustCol(H, 'R12 \nQ4 Peak', sheetName);
+  const iRPeak = mustCol(H, 'R12 En Yuksek Ay?', sheetName);
+  const m26Start = m25Start + 12;
+  const n26 = iR12 - m26Start;
+  if (n26 < 1 || n26 > 12) {
+    throw new Error(`${sheetName}: expected 1-12 month columns between the 2025 block and "R12 Avg", got ${n26}`);
+  }
 
   const out = [];
   for (let r = 1; r < sheet.length; r++) {
@@ -146,6 +160,12 @@ function parseSezonsallik(sheet, sheetName) {
       m24: slice(row, m24Start, 12),
       bucket: String(row[iBucket] || ''),
       m25: slice(row, m25Start, 12),
+      m26: slice(row, m26Start, n26),
+      r12: num(row[iR12]),
+      p12: num(row[iP12]),
+      ryoy: num(row[iRYoY]),
+      rpq: [num(row[iRQ1]) || 0, num(row[iRQ2]) || 0, num(row[iRQ3]) || 0, num(row[iRQ4]) || 0],
+      rpeakSerial: num(row[iRPeak]),
     });
   }
   return out;
@@ -165,6 +185,16 @@ function parseBrands(sheet) {
   const iQ4 = mustCol(H, '2025 \nQ4 Peak', 'Brands');
   const iPeak = mustCol(H, 'En Yuksek Ay?', 'Brands');
   const m25Start = iPeak + 1;
+  const iR12 = mustCol(H, 'R12 Avg', 'Brands');
+  const iP12 = mustCol(H, 'P12 Avg', 'Brands');
+  const iRYoY = mustCol(H, 'R12 YoY', 'Brands');
+  const iRQ1 = mustCol(H, 'R12 \nQ1 Peak', 'Brands');
+  const iRQ2 = mustCol(H, 'R12 \nQ2 Peak', 'Brands');
+  const iRQ3 = mustCol(H, 'R12 \nQ3 Peak', 'Brands');
+  const iRQ4 = mustCol(H, 'R12 \nQ4 Peak', 'Brands');
+  const iRPeak = mustCol(H, 'R12 En Yuksek Ay?', 'Brands');
+  const m26Start = m25Start + 12;
+  const n26 = iR12 - m26Start;
 
   const out = [];
   for (let r = 1; r < sheet.length; r++) {
@@ -179,6 +209,12 @@ function parseBrands(sheet) {
       pq: [num(row[iQ1]) || 0, num(row[iQ2]) || 0, num(row[iQ3]) || 0, num(row[iQ4]) || 0],
       peakSerial: num(row[iPeak]),
       m25: slice(row, m25Start, 12),
+      m26: slice(row, m26Start, n26),
+      r12: num(row[iR12]),
+      p12: num(row[iP12]),
+      ryoy: num(row[iRYoY]),
+      rpq: [num(row[iRQ1]) || 0, num(row[iRQ2]) || 0, num(row[iRQ3]) || 0, num(row[iRQ4]) || 0],
+      rpeakSerial: num(row[iRPeak]),
     });
   }
   return out;
@@ -194,7 +230,10 @@ function parseOzetDashboard(sheet) {
   const iT24 = mustCol(H, '2024 Toplam Hacim', 'Özet Dashboard');
   const iT25 = mustCol(H, '2025 Toplam Hacim', 'Özet Dashboard');
   const iYoY = mustCol(H, 'YoY Değişim', 'Özet Dashboard');
-  const iShr = mustCol(H, 'Pazar Payı (2025)', 'Özet Dashboard');
+  const iTR12 = mustCol(H, 'Son 12 Ay Toplam', 'Özet Dashboard');
+  const iTP12 = mustCol(H, 'Önceki 12 Ay Toplam', 'Özet Dashboard');
+  const iRYoY = mustCol(H, 'Rolling YoY', 'Özet Dashboard');
+  const iShr = mustCol(H, 'Pazar Payı (Son 12 Ay)', 'Özet Dashboard');
   const iPq  = mustCol(H, 'Peak Çeyrek', 'Özet Dashboard');
   const iTop = mustCol(H, 'En Yüksek Hacimli 3 Keyword', 'Özet Dashboard');
   const iGain = mustCol(H, 'En Çok Artan Keyword', 'Özet Dashboard');
@@ -210,6 +249,9 @@ function parseOzetDashboard(sheet) {
       tot24: num(row[iT24]),
       tot25: num(row[iT25]),
       yoy: num(row[iYoY]),
+      totR12: num(row[iTR12]),
+      totP12: num(row[iTP12]),
+      ryoy: num(row[iRYoY]),
       share: num(row[iShr]),
       peakQ: String(row[iPq] || ''),
       top3: String(row[iTop] || ''),
@@ -239,6 +281,16 @@ function parseKatMonthly(sheet, level) {
   const iPeak = mustCol(H, 'En Yuksek Ay?', sheetName);
   // 12 monthly columns immediately after iPeak (SUM of Jan/Feb/.../Dec 2025)
   const mStart = iPeak + 1;
+  const iR12 = mustCol(H, 'R12 Avg', sheetName);
+  const iP12 = mustCol(H, 'P12 Avg', sheetName);
+  const iRYoY = mustCol(H, 'R12 YoY', sheetName);
+  const iRQ1 = mustCol(H, 'R12 \nQ1 Peak', sheetName);
+  const iRQ2 = mustCol(H, 'R12 \nQ2 Peak', sheetName);
+  const iRQ3 = mustCol(H, 'R12 \nQ3 Peak', sheetName);
+  const iRQ4 = mustCol(H, 'R12 \nQ4 Peak', sheetName);
+  const iRPeak = mustCol(H, 'R12 En Yuksek Ay?', sheetName);
+  const m26Start = mStart + 12;
+  const n26 = iR12 - m26Start;
 
   const out = [];
   for (let r = 1; r < sheet.length; r++) {
@@ -252,6 +304,12 @@ function parseKatMonthly(sheet, level) {
       yoy: num(row[iYoY]),
       pq: [num(row[iQ1]) || 0, num(row[iQ2]) || 0, num(row[iQ3]) || 0, num(row[iQ4]) || 0],
       m25: slice(row, mStart, 12),
+      m26: slice(row, m26Start, n26),
+      r12: num(row[iR12]),
+      p12: num(row[iP12]),
+      ryoy: num(row[iRYoY]),
+      rpq: [num(row[iRQ1]) || 0, num(row[iRQ2]) || 0, num(row[iRQ3]) || 0, num(row[iRQ4]) || 0],
+      rpeakSerial: num(row[iRPeak]),
     });
   }
   return out;
@@ -265,8 +323,8 @@ function parseTrendRows(sheet) {
   const iK2 = mustCol(H, 'Kat 2', 'Top Yükselen & Düşenler');
   const iK3 = mustCol(H, 'Kat 3', 'Top Yükselen & Düşenler');
   const iKw = mustCol(H, 'Keyword', 'Top Yükselen & Düşenler');
-  const iA24 = mustCol(H, '2024 Avg', 'Top Yükselen & Düşenler');
-  const iA25 = mustCol(H, '2025 Avg', 'Top Yükselen & Düşenler');
+  const iPrev = mustCol(H, 'Önceki 12 Ay Ort', 'Top Yükselen & Düşenler');
+  const iLast = mustCol(H, 'Son 12 Ay Ort', 'Top Yükselen & Düşenler');
   const iYoY = mustCol(H, 'YoY Değişim', 'Top Yükselen & Düşenler');
   const iTrend = mustCol(H, 'Trend', 'Top Yükselen & Düşenler');
 
@@ -279,9 +337,9 @@ function parseTrendRows(sheet) {
       k2: String(row[iK2] || ''),
       k3: String(row[iK3] || ''),
       kw: String(row[iKw]),
-      a24: num(row[iA24]),
-      a25: num(row[iA25]),
-      yoy: num(row[iYoY]),
+      prev: num(row[iPrev]),
+      last: num(row[iLast]),
+      ryoy: num(row[iYoY]),
       trend: String(row[iTrend] || ''),
     });
   }
@@ -295,7 +353,7 @@ function parseSezType(sheet) {
   const iK1 = mustCol(H, 'Kat 1', 'Sezonsallık Tipi');
   const iK2 = mustCol(H, 'Kat 2', 'Sezonsallık Tipi');
   const iKw = mustCol(H, 'Keyword', 'Sezonsallık Tipi');
-  const iA25 = mustCol(H, '2025 Avg', 'Sezonsallık Tipi');
+  const iLast = mustCol(H, 'Son 12 Ay Ort', 'Sezonsallık Tipi');
   const iCv = mustCol(H, 'CV Skoru', 'Sezonsallık Tipi');
   const iType = mustCol(H, 'Mevsimsellik Tipi', 'Sezonsallık Tipi');
   const iPeak = mustCol(H, 'Peak Ay', 'Sezonsallık Tipi');
@@ -310,7 +368,7 @@ function parseSezType(sheet) {
       k1: String(row[iK1] || ''),
       k2: String(row[iK2] || ''),
       kw: String(row[iKw]),
-      a25: num(row[iA25]),
+      last: num(row[iLast]),
       cv: num(row[iCv]),
       type: String(row[iType] || ''),
       peakMonth: num(row[iPeak]),
@@ -361,8 +419,8 @@ function parseSmart(sheet) {
   const iK1 = mustCol(H, 'Kat 1', 'Akıllı Ürün Trendi');
   const iK2 = mustCol(H, 'Kat 2', 'Akıllı Ürün Trendi');
   const iKw = mustCol(H, 'Keyword', 'Akıllı Ürün Trendi');
-  const iA24 = mustCol(H, '2024 Avg', 'Akıllı Ürün Trendi');
-  const iA25 = mustCol(H, '2025 Avg', 'Akıllı Ürün Trendi');
+  const iPrev = mustCol(H, 'Önceki 12 Ay Ort', 'Akıllı Ürün Trendi');
+  const iLast = mustCol(H, 'Son 12 Ay Ort', 'Akıllı Ürün Trendi');
   const iYoY = mustCol(H, 'YoY Değişim', 'Akıllı Ürün Trendi');
   const iPeak = mustCol(H, 'Peak Ay', 'Akıllı Ürün Trendi');
   const iTag = mustCol(H, 'Segment Tag', 'Akıllı Ürün Trendi');
@@ -375,9 +433,9 @@ function parseSmart(sheet) {
       k1: String(row[iK1] || ''),
       k2: String(row[iK2] || ''),
       kw: String(row[iKw]),
-      a24: num(row[iA24]),
-      a25: num(row[iA25]),
-      yoy: num(row[iYoY]),
+      prev: num(row[iPrev]),
+      last: num(row[iLast]),
+      ryoy: num(row[iYoY]),
       peakMonth: num(row[iPeak]),
       tag: String(row[iTag] || ''),
     });
@@ -392,8 +450,8 @@ function parsePrice(sheet) {
   const iK1 = mustCol(H, 'Kat 1', 'Fiyat Intent');
   const iK2 = mustCol(H, 'Kat 2', 'Fiyat Intent');
   const iKw = mustCol(H, 'Keyword', 'Fiyat Intent');
-  const iA24 = mustCol(H, '2024 Avg', 'Fiyat Intent');
-  const iA25 = mustCol(H, '2025 Avg', 'Fiyat Intent');
+  const iPrev = mustCol(H, 'Önceki 12 Ay Ort', 'Fiyat Intent');
+  const iLast = mustCol(H, 'Son 12 Ay Ort', 'Fiyat Intent');
   const iYoY = mustCol(H, 'YoY Değişim', 'Fiyat Intent');
   const iPeak = mustCol(H, 'Peak Ay', 'Fiyat Intent');
 
@@ -405,9 +463,9 @@ function parsePrice(sheet) {
       k1: String(row[iK1] || ''),
       k2: String(row[iK2] || ''),
       kw: String(row[iKw]),
-      a24: num(row[iA24]),
-      a25: num(row[iA25]),
-      yoy: num(row[iYoY]),
+      prev: num(row[iPrev]),
+      last: num(row[iLast]),
+      ryoy: num(row[iYoY]),
       peakMonth: num(row[iPeak]),
     });
   }
@@ -422,8 +480,8 @@ function parseVolQ(sheet) {
   const H = sheet[1];
   const iQ = mustCol(H, 'Quartile', 'Hacme Göre Top KWs');
   const iCnt = mustCol(H, 'KW Sayısı', 'Hacme Göre Top KWs');
-  const iTot = mustCol(H, 'Toplam 2025 Hacim', 'Hacme Göre Top KWs');
-  const iAvg = mustCol(H, 'Ort. 2025 Avg', 'Hacme Göre Top KWs');
+  const iTot = mustCol(H, 'Toplam Son 12 Ay Hacim', 'Hacme Göre Top KWs');
+  const iAvg = mustCol(H, 'Ort. Son 12 Ay', 'Hacme Göre Top KWs');
   const iRng = mustCol(H, 'Min-Max Hacim Aralığı', 'Hacme Göre Top KWs');
   const iYoY = mustCol(H, 'Ort. YoY Değişim', 'Hacme Göre Top KWs');
   const iGain = mustCol(H, 'Artan KW %', 'Hacme Göre Top KWs');
@@ -440,7 +498,7 @@ function parseVolQ(sheet) {
       total: num(row[iTot]),
       avg: num(row[iAvg]),
       range: String(row[iRng] || ''),
-      yoy: num(row[iYoY]),
+      ryoy: num(row[iYoY]),
       pctGain: num(row[iGain]),
       pctLoss: num(row[iLoss]),
       cv: num(row[iCv]),
@@ -463,7 +521,7 @@ function parseVolQKws(sheet) {
   const iKw = mustCol(H, 'Keyword', 'Hacme Göre Top KWs (sub)');
   const iK1 = mustCol(H, 'Kat 1', 'Hacme Göre Top KWs (sub)');
   const iK2 = mustCol(H, 'Kat 2', 'Hacme Göre Top KWs (sub)');
-  const iA25 = mustCol(H, '2025 Avg', 'Hacme Göre Top KWs (sub)');
+  const iLast = mustCol(H, 'Son 12 Ay Ort', 'Hacme Göre Top KWs (sub)');
   const iYoY = mustCol(H, 'YoY Değişim', 'Hacme Göre Top KWs (sub)');
   const iCv = mustCol(H, 'CV', 'Hacme Göre Top KWs (sub)');
   const iPeak = mustCol(H, 'Peak Ay', 'Hacme Göre Top KWs (sub)');
@@ -478,8 +536,8 @@ function parseVolQKws(sheet) {
       kw: String(row[iKw]),
       k1: String(row[iK1] || ''),
       k2: String(row[iK2] || ''),
-      a25: num(row[iA25]),
-      yoy: num(row[iYoY]),
+      last: num(row[iLast]),
+      ryoy: num(row[iYoY]),
       cv: num(row[iCv]),
       peakMonth: num(row[iPeak]),
       dir: String(row[iDir] || ''),
@@ -492,19 +550,25 @@ function parseVolQKws(sheet) {
 // Derived outputs
 // ——————————————————————————————————————————————————————————
 
-function buildMonths() {
+function buildMonths(n26) {
   const months2024 = [];
   const months2025 = [];
+  const months2026 = [];
   for (let m = 1; m <= 12; m++) {
     const mm = String(m).padStart(2, '0');
     months2024.push(`2024-${mm}`);
     months2025.push(`2025-${mm}`);
+    if (m <= n26) months2026.push(`2026-${mm}`);
   }
-  return { months2024, months2025 };
+  // Rolling windows: last 12 months of available data + the 12 before that
+  const all = [...months2024, ...months2025, ...months2026];
+  const monthsR12 = all.slice(-12);
+  const monthsP12 = all.slice(-24, -12);
+  return { months2024, months2025, months2026, monthsR12, monthsP12 };
 }
 
 function computeKat1Colors(kat1Summary, overrides) {
-  const sorted = [...kat1Summary].sort((a, b) => (b.tot25 || 0) - (a.tot25 || 0));
+  const sorted = [...kat1Summary].sort((a, b) => (b.totR12 || 0) - (a.totR12 || 0));
   const out = {};
   sorted.forEach((row, i) => {
     out[row.k1] = PALETTE[i % PALETTE.length];
@@ -535,8 +599,9 @@ function main() {
   console.log(`  sheets: ${Object.keys(sheets).join(', ')}`);
 
   console.log('[build-data] Parsing sheets...');
-  const { months2024, months2025 } = buildMonths();
   const keywords = parseSezonsallik(sheets['Sezonsallık']);
+  const n26 = keywords.length ? keywords[0].m26.length : 0;
+  const { months2024, months2025, months2026, monthsR12, monthsP12 } = buildMonths(n26);
   const kat1Summary = parseOzetDashboard(sheets['Özet Dashboard'] || []);
   const kat1Monthly = parseKatMonthly(sheets['Kat 1 Sez.'] || [], 1);
   const kat2Monthly = parseKatMonthly(sheets['Kat 2 Sez.'] || [], 2);
@@ -562,13 +627,14 @@ function main() {
 
   // Compute colors
   const kat1Colors = computeKat1Colors(kat1Summary, brand.kat1ColorOverrides);
-  const sortedKat1s = [...kat1Summary].sort((a, b) => (b.tot25 || 0) - (a.tot25 || 0)).map(r => r.k1);
+  const sortedKat1s = [...kat1Summary].sort((a, b) => (b.totR12 || 0) - (a.totR12 || 0)).map(r => r.k1);
   const brandAccent = computeBrandAccent(brand, kat1Colors, sortedKat1s);
   console.log(`  kat1Colors: ${Object.keys(kat1Colors).length} categories, accent: ${brandAccent}`);
 
   // Assemble DATA object
   const DATA = {
-    months2024, months2025,
+    months2024, months2025, months2026,
+    monthsR12, monthsP12,
     keywords,
     kat1Summary,
     kat1Monthly, kat2Monthly, kat3Monthly,

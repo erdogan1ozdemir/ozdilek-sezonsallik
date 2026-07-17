@@ -11,6 +11,7 @@
   const AGENCY = B.agency || { name: '', label: '', show: false };
   const STORAGE_TAB = `${BRAND_SLUG}.tab`;
   const STORAGE_TWEAKS = `${BRAND_SLUG}.tweaks`;
+  const STORAGE_VIEWMODE = `${BRAND_SLUG}.viewMode`;
 
   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
     "theme": "light",
@@ -60,6 +61,13 @@
     const [globalBrand, setGlobalBrand] = React.useState(() => (initialHash && initialHash.brand) || []);
     // Özdilekte Var / Yok — katalog durumu filtresi (global). '' = tümü, 'Var' = sadece portföyde, 'Yok' = sadece portföy dışı
     const [globalCatalog, setGlobalCatalog] = React.useState('');
+    // Grafik görünüm modu: 'rolling' (Son 12 Ay vs Önceki 12 Ay) | 'calendar' (2024/2025/2026 takvim yılları)
+    // KPI ve YoY pill'ler her zaman rolling'dir; toggle yalnızca zaman serisi grafiklerini etkiler.
+    const [viewMode, setViewMode] = React.useState(() => {
+      const v = localStorage.getItem(STORAGE_VIEWMODE);
+      return v === 'calendar' ? 'calendar' : 'rolling';
+    });
+    React.useEffect(() => { localStorage.setItem(STORAGE_VIEWMODE, viewMode); }, [viewMode]);
     // Secondary analytical filters (used by Trendler + Keyword + OutOfCatalog + Fiyat tabs)
     const [globalPeakMonth, setGlobalPeakMonth] = React.useState([]);
     const [globalPeakQuarter, setGlobalPeakQuarter] = React.useState([]);
@@ -103,7 +111,8 @@
     // Secondary filter options
     const TR_MONTHS_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
     const monthOptions = React.useMemo(() => TR_MONTHS_SHORT, []);
-    const quarterOptions = ['Q1 (Oca-Mar)','Q2 (Nis-Haz)','Q3 (Tem-Eyl)','Q4 (Eki-Ara)'];
+    // Rolling pencerede her takvim çeyreği tek bir yıla düşer → etiketler yıl taşır ("Q3 25 (Tem-Eyl)")
+    const quarterOptions = window.U.QUARTER_OPTIONS;
     const sezTypeOptions = ['Evergreen','Orta Mevsimsellik','Yüksek Mevsimsellik'];
     const bucketOptions = React.useMemo(() =>
       [...new Set(D.keywords.map(k => k.bucket).filter(Boolean))].sort((a,b) => {
@@ -245,7 +254,8 @@
       globalPeakMonth, globalPeakQuarter, globalSezType, globalBucket, globalTrend,
       setGlobalK1, setGlobalK2, setGlobalK3, setGlobalBrand, setGlobalCatalog,
       setGlobalPeakMonth, setGlobalPeakQuarter, setGlobalSezType, setGlobalBucket, setGlobalTrend,
-      hasGlobalFilter
+      hasGlobalFilter,
+      viewMode
     };
 
     function renderTab(id) {
@@ -413,6 +423,10 @@
             h('button',{className:globalTrend==='rising'?'active':'', onClick:()=>setGlobalTrend('rising')}, '↑ Yükselen'),
             h('button',{className:globalTrend==='stable'?'active':'', onClick:()=>setGlobalTrend('stable')}, '→ Stabil'),
             h('button',{className:globalTrend==='falling'?'active':'', onClick:()=>setGlobalTrend('falling')}, '↓ Düşen')
+          ),
+          h('div',{className:'segmented', title:'Grafik görünümü: Rolling = Son 12 Ay (Tem 25 – Haz 26) vs Önceki 12 Ay; Takvim = 2024 / 2025 / 2026 yıl çizgileri. KPI ve YoY değerleri her zaman rolling karşılaştırmadır.', style:{fontSize:11}},
+            h('button',{className:viewMode==='rolling'?'active':'', onClick:()=>setViewMode('rolling')}, 'Rolling 12 Ay'),
+            h('button',{className:viewMode==='calendar'?'active':'', onClick:()=>setViewMode('calendar')}, 'Takvim Yılı')
           )
         ),
         hasGlobalFilter && h('div',{className:'filter-chips', style:{marginBottom:6, marginTop:6}},
@@ -423,7 +437,7 @@
           globalBrand.map(b => h('button',{key:'b'+b, className:'filter-chip', onClick:()=>setGlobalBrand(globalBrand.filter(x=>x!==b))}, 'Marka: '+b, h('span',{className:'x'},'×'))),
           globalCatalog && h('button',{className:'filter-chip', onClick:()=>setGlobalCatalog('')}, 'Özdilekte '+globalCatalog, h('span',{className:'x'},'×')),
           globalPeakMonth.map(m => h('button',{key:'pm'+m, className:'filter-chip', onClick:()=>setGlobalPeakMonth(globalPeakMonth.filter(x=>x!==m))}, 'Peak: '+m, h('span',{className:'x'},'×'))),
-          globalPeakQuarter.map(q => h('button',{key:'pq'+q, className:'filter-chip', onClick:()=>setGlobalPeakQuarter(globalPeakQuarter.filter(x=>x!==q))}, 'Ç: '+q.split(' ')[0], h('span',{className:'x'},'×'))),
+          globalPeakQuarter.map(q => h('button',{key:'pq'+q, className:'filter-chip', onClick:()=>setGlobalPeakQuarter(globalPeakQuarter.filter(x=>x!==q))}, 'Ç: '+q.replace(/\s*\(.*\)$/, ''), h('span',{className:'x'},'×'))),
           globalSezType.map(t => h('button',{key:'st'+t, className:'filter-chip', onClick:()=>setGlobalSezType(globalSezType.filter(x=>x!==t))}, t, h('span',{className:'x'},'×'))),
           globalBucket.map(b => h('button',{key:'bk'+b, className:'filter-chip', onClick:()=>setGlobalBucket(globalBucket.filter(x=>x!==b))}, 'Hacim: '+b, h('span',{className:'x'},'×'))),
           globalTrend && h('button',{className:'filter-chip', onClick:()=>setGlobalTrend('')}, globalTrend==='rising'?'↑ Yükselen':globalTrend==='falling'?'↓ Düşen':'→ Stabil', h('span',{className:'x'},'×'))
@@ -490,7 +504,7 @@
       ),
 
       // Keyword modal
-      keywordModal && h(KeywordModal, {kw: keywordModal, onClose:()=>setKeywordModal(null)})
+      keywordModal && h(KeywordModal, {kw: keywordModal, viewMode, onClose:()=>setKeywordModal(null)})
     );
   }
 

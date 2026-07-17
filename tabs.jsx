@@ -3,7 +3,7 @@ window.TABS = (function(){
   const B = window.BRAND || {};
   const BRAND_NAME = B.name || 'Dashboard';
   const BRAND_SLUG = (B.slug || 'dashboard').replace(/[^a-z0-9-]/gi, '').toLowerCase() || 'dashboard';
-  const { fmtNum, fmtFull, fmtPct, TR_MONTHS, TR_MONTHS_LONG, serialToMonthIdx, aggregateMonthly, trendClass, toCSV, downloadCSV } = U;
+  const { fmtNum, fmtFull, fmtPct, TR_MONTHS, TR_MONTHS_LONG, serialToMonthIdx, serialToRollingLabel, aggregateMonthly, aggregateRolling, rollingOf, prevRollingOf, rollingIdxToCalMonth, ROLLING_LABELS, P12_LABELS, QUARTER_OPTIONS, qLabel, quarterSums, peakQuarterIdx, trendClass, toCSV, downloadCSV } = U;
   const { Kpi, YoYPill, Sparkline, Heatmap, ShareBars, QStack, Modal, LineChart, BarChart, Donut, InfoIcon, Explainer, SectionHeader, SmallMultiples, PolarPeak, EmptyState, Skeleton, ChartActions, BumpChart, StreamGraph, Zoomable, CopyButton } = C;
   const h = React.createElement;
   const D = window.DATA;
@@ -32,18 +32,20 @@ window.TABS = (function(){
       if (brS && !brS.has(k.brand)) return false;
       if (catF && k.catalog !== catF) return false;
       if (bkS && !bkS.has(k.bucket)) return false;
-      if (tr === 'rising' && !(k.yoy > 0.05)) return false;
-      if (tr === 'falling' && !(k.yoy < -0.05)) return false;
-      if (tr === 'stable' && !(k.yoy >= -0.05 && k.yoy <= 0.05)) return false;
+      const kyoy = k.ryoy != null ? k.ryoy : k.yoy;
+      if (tr === 'rising' && !(kyoy > 0.05)) return false;
+      if (tr === 'falling' && !(kyoy < -0.05)) return false;
+      if (tr === 'stable' && !(kyoy >= -0.05 && kyoy <= 0.05)) return false;
       if (mS || qS) {
-        if (!k.m25) return false;
-        const pi = k.m25.indexOf(Math.max(...k.m25));
-        if (mS && !mS.has(TR_MO_SHORT[pi])) return false;
-        if (qS) {
-          const qIdx = Math.floor(pi / 3);
-          const qLabel = ['Q1 (Oca-Mar)','Q2 (Nis-Haz)','Q3 (Tem-Eyl)','Q4 (Eki-Ara)'][qIdx];
-          if (!qS.has(qLabel)) return false;
+        const roll = rollingOf(k);
+        if (!roll || !roll.length) return false;
+        // Peak ay = Son 12 Ay penceresindeki en yüksek ay
+        if (mS) {
+          const pi = rollingIdxToCalMonth(roll.indexOf(Math.max(...roll)));
+          if (!mS.has(TR_MO_SHORT[pi])) return false;
         }
+        // Peak çeyrek = Son 12 Ay penceresindeki en yüksek hacimli çeyrek (tablodaki Peak Ç. ile aynı)
+        if (qS && !qS.has(QUARTER_OPTIONS[peakQuarterIdx(roll)])) return false;
       }
       if (stS && sezTypeMap) {
         const t = sezTypeMap.get(k.kw + '|' + k.k1);
@@ -131,37 +133,81 @@ window.TABS = (function(){
   const KAT1_COLORS = window.KAT1_COLORS || {};
   const katColor = k => KAT1_COLORS[k] || '#8A8A8A';
 
-  // Globals
+  // Globals — karşılaştırmalar rolling (Son 12 Ay vs Önceki 12 Ay); takvim
+  // toplamları (2024/2025) takvim görünümü için korunur.
   const TOTAL_KW = D.keywords.length;
   const TOTAL_2025 = D.keywords.reduce((a,k)=>a+(k.a25||0),0) * 12;
   const TOTAL_2024 = D.keywords.reduce((a,k)=>a+(k.a24||0),0) * 12;
   const TOTAL_YOY = (TOTAL_2025 - TOTAL_2024) / TOTAL_2024;
+  const TOTAL_R12 = D.keywords.reduce((a,k)=>a+(k.r12||0),0) * 12;
+  const TOTAL_P12 = D.keywords.reduce((a,k)=>a+(k.p12||0),0) * 12;
+  const ROLLING_YOY = TOTAL_P12 ? (TOTAL_R12 - TOTAL_P12) / TOTAL_P12 : 0;
   const MONTHLY_TOTAL = aggregateMonthly(D.keywords, 'm25');
   const MONTHLY_TOTAL_24 = aggregateMonthly(D.keywords, 'm24');
+  const MONTHLY_R12 = aggregateRolling(D.keywords, 'last');
+  const MONTHLY_P12 = aggregateRolling(D.keywords, 'prev');
   const RISING = D.trendRows.filter(r=>r.trend==='YÜKSELEN');
   const FALLING = D.trendRows.filter(r=>r.trend==='DÜŞEN' || r.trend==='AZALAN');
-  const PRICE_TOTAL = D.price.reduce((a,k)=>a+(k.a25||0),0) * 12;
-  const PRICE_TOTAL_24 = D.price.reduce((a,k)=>a+(k.a24||0),0) * 12;
-  const PRICE_YOY = (PRICE_TOTAL - PRICE_TOTAL_24) / (PRICE_TOTAL_24||1);
-  const PEAK_MONTH_IDX = MONTHLY_TOTAL.indexOf(Math.max(...MONTHLY_TOTAL));
+  const PRICE_TOTAL = D.price.reduce((a,k)=>a+(k.last||0),0) * 12;
+  const PRICE_TOTAL_PREV = D.price.reduce((a,k)=>a+(k.prev||0),0) * 12;
+  const PRICE_YOY = (PRICE_TOTAL - PRICE_TOTAL_PREV) / (PRICE_TOTAL_PREV||1);
+  const PEAK_MONTH_IDX = MONTHLY_R12.indexOf(Math.max(...MONTHLY_R12));  // rolling index (0 = ilk rolling ay)
+  // Rolling dönem etiketleri — başlık/alt yazılarda kullanılır ("Tem 25 – Haz 26")
+  const R12_RANGE = ROLLING_LABELS.length ? `${ROLLING_LABELS[0]} – ${ROLLING_LABELS[11]}` : '';
+  const P12_RANGE = P12_LABELS.length ? `${P12_LABELS[0]} – ${P12_LABELS[11]}` : '';
+  const N26 = (D.months2026 || []).length;
+  // Rolling index (0-11) → "Temmuz 2025" gibi uzun etiket
+  function rollingLongLabel(i) {
+    const cal = rollingIdxToCalMonth(i);
+    const yy = (ROLLING_LABELS[i] || '').split(' ')[1] || '';
+    return TR_MONTHS_LONG[cal] + (yy ? ' 20' + yy : '');
+  }
+  // Kısmi 2026 serisini 12 aya tamamla (takvim görünümü — kalan aylar null)
+  function pad12(arr) {
+    const out = new Array(12).fill(null);
+    (arr || []).forEach((v, i) => { out[i] = v; });
+    return out;
+  }
+  // Takvim görünümünde her yıl için "Oca 24 … Ara 24" tipi nokta etiketleri
+  const calLabelsFor = (yy) => TR_MONTHS.map(m => `${m} ${yy}`);
+  // Line chart serileri — viewMode'a göre takvim (2024/2025/2026) veya rolling (Son/Önceki 12 Ay).
+  // pointLabels: tooltip'te her serinin kendi ayını yılıyla göstermek için (Haz 26 / Haz 25).
+  function lineSeriesFor(viewMode, { m24, m25, m26, roll, prev, peakIdx }) {
+    if (viewMode === 'calendar') {
+      const series = [];
+      if (m24) series.push({name:'2024', shortName:'2024', pointLabels:calLabelsFor('24'), values:m24, color:'color-mix(in srgb, var(--ink-3) 55%, transparent)'});
+      if (m25) series.push({name:'2025', shortName:'2025', pointLabels:calLabelsFor('25'), values:m25, color:'color-mix(in srgb, var(--ink-3) 90%, transparent)'});
+      if (m26) series.push({name:'2026', shortName:'2026', pointLabels:calLabelsFor('26'), values:pad12(m26), color:'var(--coral)'});
+      return { series, labels: TR_MONTHS };
+    }
+    const series = [];
+    if (prev) series.push({name:`Önceki 12 Ay (${P12_RANGE})`, shortName:'Önceki 12 Ay', pointLabels:P12_LABELS, values:prev, color:'color-mix(in srgb, var(--ink-3) 80%, transparent)'});
+    if (roll) series.push({name:`Son 12 Ay (${R12_RANGE})`, shortName:'Son 12 Ay', pointLabels:ROLLING_LABELS, values:roll, color:'var(--coral)', peakIdx});
+    return { series, labels: ROLLING_LABELS };
+  }
 
   function kat2InK1(k1) { return [...new Set(D.keywords.filter(k => !k1 || k.k1===k1).map(k => k.k2))].sort(); }
   function kat3InK1K2(k1, k2) { return [...new Set(D.keywords.filter(k => (!k1||k.k1===k1) && (!k2||k.k2===k2)).map(k => k.k3))].sort(); }
 
-  // Build 2024 monthly array (12) by aggregating matching keywords
-  function m24ForLabels(level, labels) {
-    const items = D.keywords.filter(k => {
+  function kwsForLabels(level, labels) {
+    return D.keywords.filter(k => {
       if (k.k1 !== labels[0]) return false;
       if (level !== 'kat1' && k.k2 !== labels[1]) return false;
       if (level === 'kat3' && k.k3 !== labels[2]) return false;
       return true;
     });
-    const out = new Array(12).fill(0);
-    for (const k of items) {
-      if (!k.m24) continue;
-      for (let i=0; i<12; i++) out[i] += (k.m24[i] || 0);
-    }
-    return out;
+  }
+  // Build 2024 monthly array (12) by aggregating matching keywords (takvim görünümü)
+  function m24ForLabels(level, labels) {
+    return aggregateMonthly(kwsForLabels(level, labels), 'm24');
+  }
+  // Önceki 12 Ay monthly array (12) — rolling heatmap karşılaştırması
+  function p12ForLabels(level, labels) {
+    return aggregateRolling(kwsForLabels(level, labels), 'prev');
+  }
+  // Son 12 Ay monthly array (12)
+  function r12ForLabels(level, labels) {
+    return aggregateRolling(kwsForLabels(level, labels), 'last');
   }
 
   function cv(values) {
@@ -208,28 +254,33 @@ window.TABS = (function(){
     const g_k2Set = globalK2.length ? new Set(globalK2) : null;
     const g_k3Set = globalK3.length ? new Set(globalK3) : null;
 
+    const viewMode = globalFilter.viewMode || 'rolling';
     const f_TOTAL_KW = fKeywords.length;
-    const f_TOTAL_2025 = fKeywords.reduce((a,k)=>a+(k.a25||0),0) * 12;
-    const f_TOTAL_2024 = fKeywords.reduce((a,k)=>a+(k.a24||0),0) * 12;
-    const f_TOTAL_YOY = f_TOTAL_2024 ? (f_TOTAL_2025 - f_TOTAL_2024) / f_TOTAL_2024 : 0;
+    // KPI ve YoY her zaman rolling: Son 12 Ay (R12) vs Önceki 12 Ay (P12)
+    const f_TOTAL_R12 = fKeywords.reduce((a,k)=>a+(k.r12||0),0) * 12;
+    const f_TOTAL_P12 = fKeywords.reduce((a,k)=>a+(k.p12||0),0) * 12;
+    const f_TOTAL_YOY = f_TOTAL_P12 ? (f_TOTAL_R12 - f_TOTAL_P12) / f_TOTAL_P12 : 0;
     const f_MONTHLY_25 = aggregateMonthly(fKeywords, 'm25');
     const f_MONTHLY_24 = aggregateMonthly(fKeywords, 'm24');
-    const f_PEAK_IDX = f_MONTHLY_25.indexOf(Math.max(...f_MONTHLY_25));
+    const f_MONTHLY_26 = aggregateMonthly(fKeywords, 'm26').slice(0, N26);
+    const f_MONTHLY_R12 = aggregateRolling(fKeywords, 'last');
+    const f_MONTHLY_P12 = aggregateRolling(fKeywords, 'prev');
+    const f_PEAK_IDX = f_MONTHLY_R12.indexOf(Math.max(...f_MONTHLY_R12));  // rolling index
     const f_PRICE = hasGlobalFilter ? D.price.filter(k => {
       if (g_k1Set && !g_k1Set.has(k.k1)) return false;
       if (g_k2Set && !g_k2Set.has(k.k2)) return false;
       if (g_k3Set && !g_k3Set.has(k.k3)) return false;
       return true;
     }) : D.price;
-    const f_PRICE_TOTAL = f_PRICE.reduce((a,k)=>a+(k.a25||0),0) * 12;
-    const f_PRICE_24 = f_PRICE.reduce((a,k)=>a+(k.a24||0),0) * 12;
-    const f_PRICE_YOY = f_PRICE_24 ? (f_PRICE_TOTAL - f_PRICE_24) / f_PRICE_24 : 0;
+    const f_PRICE_TOTAL = f_PRICE.reduce((a,k)=>a+(k.last||0),0) * 12;
+    const f_PRICE_PREV = f_PRICE.reduce((a,k)=>a+(k.prev||0),0) * 12;
+    const f_PRICE_YOY = f_PRICE_PREV ? (f_PRICE_TOTAL - f_PRICE_PREV) / f_PRICE_PREV : 0;
 
-    const risingCnt = fKeywords.filter(k=>k.yoy>0.05).length;
-    const fallingCnt = fKeywords.filter(k=>k.yoy<-0.05).length;
-    const top10 = [...fKeywords].sort((a,b)=>b.a25-a.a25).slice(0,10);
+    const risingCnt = fKeywords.filter(k=>k.ryoy>0.05).length;
+    const fallingCnt = fKeywords.filter(k=>k.ryoy<-0.05).length;
+    const top10 = [...fKeywords].sort((a,b)=>b.r12-a.r12).slice(0,10);
 
-    const contributors = fKeywords.map(k => ({...k, delta: (k.a25 - k.a24) * 12})).filter(k => !isNaN(k.delta));
+    const contributors = fKeywords.map(k => ({...k, delta: ((k.r12||0) - (k.p12||0)) * 12})).filter(k => !isNaN(k.delta));
     const topGainers = [...contributors].sort((a,b) => b.delta - a.delta).slice(0, 10);
     const topLosers = [...contributors].sort((a,b) => a.delta - b.delta).slice(0, 10);
 
@@ -245,7 +296,7 @@ window.TABS = (function(){
       let items;
       if (donutLevel === 'kat1') {
         items = D.kat1Summary.map(k => ({
-          label: k.k1, key: k.k1, parentK1: k.k1, value: k.tot25, sub: null
+          label: k.k1, key: k.k1, parentK1: k.k1, value: k.totR12, sub: null
         }));
       } else if (donutLevel === 'kat2') {
         items = D.kat2Monthly
@@ -254,7 +305,7 @@ window.TABS = (function(){
             label: r.labels[1],
             key: r.labels[0] + '>' + r.labels[1],
             parentK1: r.labels[0],
-            value: (r.m25 || []).reduce((a,b)=>a+b, 0),
+            value: (r.r12 || 0) * 12,
             sub: r.labels[0]
           }));
       } else {
@@ -269,7 +320,7 @@ window.TABS = (function(){
             label: r.labels[2],
             key: r.labels.join('>'),
             parentK1: r.labels[0],
-            value: (r.m25 || []).reduce((a,b)=>a+b, 0),
+            value: (r.r12 || 0) * 12,
             sub: r.labels.slice(0, 2).join(' > ')
           }));
       }
@@ -283,7 +334,7 @@ window.TABS = (function(){
       if (yoyLevel !== 'kat1' && yoyFilter.k1) cats = cats.filter(c => c.k1 === yoyFilter.k1);
       if (yoyLevel === 'kat3' && yoyFilter.k2) cats = cats.filter(c => c.k2 === yoyFilter.k2);
       return cats.map(c => ({
-        label: c.label, value: c.row.yoy || 0,
+        label: c.label, value: c.row.ryoy || 0,
         color: katColor(c.k1),
         ctx: c
       })).sort((a,b) => b.value - a.value).slice(0, 15);
@@ -295,10 +346,10 @@ window.TABS = (function(){
       if (qLevel !== 'kat1' && qFilter.k1) cats = cats.filter(c => c.k1 === qFilter.k1);
       if (qLevel === 'kat3' && qFilter.k2) cats = cats.filter(c => c.k2 === qFilter.k2);
       return cats.map(c => {
-        const m = c.row.m25;
-        const q1 = m[0]+m[1]+m[2], q2 = m[3]+m[4]+m[5], q3 = m[6]+m[7]+m[8], q4 = m[9]+m[10]+m[11];
+        // Son 12 Ay penceresi; her ay kendi takvim çeyreğine yazılır
+        const qs = quarterSums(rollingOf(c.row));
+        const [q1,q2,q3,q4] = qs;
         const tot = q1+q2+q3+q4;
-        const qs = [q1,q2,q3,q4];
         const peakQ = qs.indexOf(Math.max(...qs)) + 1;
         return { label: c.label, sub: c.sub, q1, q2, q3, q4, tot, peakQ, ctx: c };
       }).sort((a,b)=>b.tot-a.tot);
@@ -311,20 +362,24 @@ window.TABS = (function(){
       else if (heatLevel === 'kat2') rows = D.kat2Monthly.filter(r => !heatFilter.k1 || r.labels[0] === heatFilter.k1);
       else rows = D.kat3Monthly.filter(r => (!heatFilter.k1 || r.labels[0] === heatFilter.k1) && (!heatFilter.k2 || r.labels[1] === heatFilter.k2));
       rows = [...rows];
-      if (heatSort === 'vol') rows.sort((a,b) => (b.m25||[]).reduce((s,x)=>s+x,0) - (a.m25||[]).reduce((s,x)=>s+x,0));
-      else if (heatSort === 'yoyDesc') rows.sort((a,b) => (b.yoy||0) - (a.yoy||0));
-      else if (heatSort === 'yoyAsc') rows.sort((a,b) => (a.yoy||0) - (b.yoy||0));
+      if (heatSort === 'vol') rows.sort((a,b) => (b.r12||0) - (a.r12||0));
+      else if (heatSort === 'yoyDesc') rows.sort((a,b) => (b.ryoy||0) - (a.ryoy||0));
+      else if (heatSort === 'yoyAsc') rows.sort((a,b) => (a.ryoy||0) - (b.ryoy||0));
       else if (heatSort === 'alpha') rows.sort((a,b) => (a.labels[a.labels.length-1]||'').localeCompare(b.labels[b.labels.length-1]||'', 'tr'));
       return rows.map(r => {
-        const peakIdx = r.m25.indexOf(Math.max(...r.m25));
+        const values = viewMode === 'calendar' ? r.m25 : rollingOf(r);
+        const prevValues = viewMode === 'calendar'
+          ? m24ForLabels(heatLevel, r.labels)
+          : p12ForLabels(heatLevel, r.labels);
+        const peakIdx = values.indexOf(Math.max(...values));
         return {
           label: heatLevel==='kat1' ? r.labels[0] : r.labels.slice(-1)[0],
           sub: heatLevel==='kat1' ? null : r.labels.slice(0,-1).join(' > '),
-          values: r.m25, prevValues: r.m24 || m24ForLabels(heatLevel, r.labels), peakIdx,
+          values, prevValues, peakIdx,
           ctx: {k1:r.labels[0], k2:r.labels[1], k3:r.labels[2]}
         };
       });
-    }, [heatLevel, heatFilter, heatSort]);
+    }, [heatLevel, heatFilter, heatSort, viewMode]);
 
     return h('div',null,
       // Report explainer at top
@@ -336,7 +391,7 @@ window.TABS = (function(){
       },
         h('p',null,
           'Bu panel, ', h('strong',null,`${BRAND_NAME} kategorilerinde Google'da aranan kelimeleri`),
-          ' analiz eder. 2024 ve 2025 verilerini karşılaştırarak, hangi ürün ve kategorilere ilgi arttığını, hangilerinin düştüğünü ve yıl içinde hangi aylarda ne çok arandığını gösterir.'
+          ` analiz eder. Son 12 ayı (${R12_RANGE}) önceki 12 ayla (${P12_RANGE}) karşılaştırarak, hangi ürün ve kategorilere ilgi arttığını, hangilerinin düştüğünü ve yıl içinde hangi aylarda ne çok arandığını gösterir. 2024'ten bu yana tüm aylık veriler korunur; grafiklerde "Takvim Yılı" görünümüyle yıl yıl da incelenebilir.`
         ),
         h('div',{className:'explainer-grid'},
           h('div',null,
@@ -348,8 +403,8 @@ window.TABS = (function(){
             ),
             h('h4',{className:'h4-icon'}, h('span',{className:'h4i'}, I.TrendUp(16)), 'YoY (Year over Year) Nedir?'),
             h('p',null,
-              'Bu yıl ile geçen yıl arasındaki büyüme / düşüş oranı. ', h('strong',null,'+45%'),
-              ' = geçen yıla göre %45 arttı. ', h('strong',null,'-20%'), ' = %20 düştü.',
+              `Son 12 ay (${R12_RANGE}) ile önceki 12 ay (${P12_RANGE}) arasındaki büyüme / düşüş oranı. `, h('strong',null,'+45%'),
+              ' = önceki 12 aya göre %45 arttı. ', h('strong',null,'-20%'), ' = %20 düştü.',
               ' Yükselen trendler içerik yatırımı için fırsat oluşturabilir; düşenler için rakip analizi veya önceliği azaltma değerlendirilebilir.'
             )
           ),
@@ -385,33 +440,34 @@ window.TABS = (function(){
           h('path',{d:'M7 14l4-4 4 4 5-5'})
         ),
         title: hasGlobalFilter ? 'Seçili Pazar Dilimi' : 'Pazar Özeti',
-        desc: hasGlobalFilter ? 'Aktif filtrelere göre ana metrikler, yıllık trend ve peak sezon.' : `${BRAND_NAME} kategorilerinin 2025 genel görünümü, yıllık karşılaştırma ve sezonsallık.`
+        desc: hasGlobalFilter ? `Aktif filtrelere göre ana metrikler, Son 12 Ay (${R12_RANGE}) trendi ve peak sezon.` : `${BRAND_NAME} kategorilerinin Son 12 Ay (${R12_RANGE}) genel görünümü, önceki 12 ay karşılaştırması ve sezonsallık.`
       }),
 
-      // Hero KPI: Toplam 2025
+      // Hero KPI: Toplam Son 12 Ay
       h('div',{className:'hero-kpi'},
         h('div',{className:'hk-left'},
-          h('div',{className:'hk-label'}, hasGlobalFilter ? 'Filtreli Toplam 2025 Arama' : 'Toplam 2025 Arama'),
-          h('div',{className:'hk-value'}, fmtNum(f_TOTAL_2025)),
+          h('div',{className:'hk-label'}, (hasGlobalFilter ? 'Filtreli ' : '') + 'Toplam Arama · Son 12 Ay'),
+          h('div',{className:'hk-value'}, fmtNum(f_TOTAL_R12)),
           h('div',{className:'hk-sub'},
-            h('span',{className:'pill '+trendClass(f_TOTAL_YOY), style:{fontWeight:700}}, (f_TOTAL_YOY>=0?'↑ ':'↓ '), fmtPct(f_TOTAL_YOY)),
-            h('span',{style:{color:'var(--ink-3)'}},'vs. 2024 · ', fmtFull(f_TOTAL_KW), ' KW')
+            h('span',{className:'pill '+trendClass(f_TOTAL_YOY), style:{fontWeight:700}, title:`Son 12 Ay (${R12_RANGE}) vs Önceki 12 Ay (${P12_RANGE})`}, (f_TOTAL_YOY>=0?'↑ ':'↓ '), fmtPct(f_TOTAL_YOY)),
+            h('span',{style:{color:'var(--ink-3)'}},'vs. önceki 12 ay · ', fmtFull(f_TOTAL_KW), ' KW')
           )
         ),
         h('div',{className:'hk-spark'},
           // Legend kartın subtitle bölgesinde zaten söyleniyor; chart konteynere
-          // tam oturması için legend:false. Renk kodu 2024 gri / 2025 coral.
-          h(LineChart,{
-            series:[
-              {name:'2024', values:f_MONTHLY_24, color:'color-mix(in srgb, var(--ink-3) 80%, transparent)'},
-              {name:'2025', values:f_MONTHLY_25, color:'var(--coral)', peakIdx:f_PEAK_IDX}
-            ], legend:false, height:140
-          })
+          // tam oturması için legend:false.
+          (() => {
+            const { series, labels } = lineSeriesFor(viewMode, {
+              m24: f_MONTHLY_24, m25: f_MONTHLY_25, m26: f_MONTHLY_26,
+              roll: f_MONTHLY_R12, prev: f_MONTHLY_P12, peakIdx: f_PEAK_IDX
+            });
+            return h(LineChart,{ series, labels, legend:false, height:140 });
+          })()
         ),
         h('div',{className:'hk-right'},
           h('div',{className:'hk-peak-label'}, 'Peak Ay'),
-          h('div',{className:'hk-peak'}, TR_MONTHS_LONG[f_PEAK_IDX]),
-          h('div',{style:{fontSize:11,color:'var(--ink-3)',marginTop:2}}, fmtFull(f_MONTHLY_25[f_PEAK_IDX]), ' arama')
+          h('div',{className:'hk-peak'}, rollingLongLabel(f_PEAK_IDX)),
+          h('div',{style:{fontSize:11,color:'var(--ink-3)',marginTop:2}}, fmtFull(f_MONTHLY_R12[f_PEAK_IDX]), ' arama')
         )
       ),
 
@@ -422,27 +478,27 @@ window.TABS = (function(){
           h('div',{className:'km-value'}, fmtFull(f_TOTAL_KW)),
           h('div',{className:'km-sub'}, hasGlobalFilter ? `${globalK1.length + globalK2.length + globalK3.length} filtre` : `${D.kat1Summary.length} K1 · ${D.kat2Monthly.length} K2`),
           h(InfoIcon,{className:'kpi-info', title:'Keyword Sayısı'},
-            h('strong',null,'Ne? '),'Filtrelenmiş keyword sayısı. 2024 VEYA 2025 hacmi > 0 olanlar sayılır.'
+            h('strong',null,'Ne? '),'Filtrelenmiş keyword sayısı. Herhangi bir dönemde hacmi > 0 olanlar sayılır.'
           )
         ),
         h('div',{className:'kpi-mini'},
           h('div',{className:'km-label'},'Yükselen'),
           h('div',{className:'km-value', style:{color:'var(--green)'}}, fmtFull(risingCnt)),
           h(InfoIcon,{className:'kpi-info', title:'Yükselen Keyword'},
-            h('strong',null,'Ne? '),'2025 hacmi 2024\'e göre %5 veya daha fazla artan keyword sayısı.'
+            h('strong',null,'Ne? '),`Son 12 Ay hacmi önceki 12 aya (${P12_RANGE}) göre %5 veya daha fazla artan keyword sayısı.`
           )
         ),
         h('div',{className:'kpi-mini'},
           h('div',{className:'km-label'},'Düşen'),
           h('div',{className:'km-value', style:{color:'var(--red)'}}, fmtFull(fallingCnt)),
           h(InfoIcon,{className:'kpi-info', title:'Düşen Keyword'},
-            h('strong',null,'Ne? '),'2025 hacmi 2024\'e göre %5 veya daha fazla düşen keyword sayısı.'
+            h('strong',null,'Ne? '),`Son 12 Ay hacmi önceki 12 aya (${P12_RANGE}) göre %5 veya daha fazla düşen keyword sayısı.`
           )
         ),
         h('div',{className:'kpi-mini'},
           h('div',{className:'km-label'},'Peak Ay'),
-          h('div',{className:'km-value'}, TR_MONTHS[f_PEAK_IDX]),
-          h('div',{className:'km-sub'}, fmtFull(f_MONTHLY_25[f_PEAK_IDX]), ' arama'),
+          h('div',{className:'km-value'}, ROLLING_LABELS[f_PEAK_IDX]),
+          h('div',{className:'km-sub'}, fmtFull(f_MONTHLY_R12[f_PEAK_IDX]), ' arama'),
           h(InfoIcon,{className:'kpi-info', title:'Peak Ay'},
             h('strong',null,'Ne? '),'Seçili filtrede en yüksek toplam arama hacmine sahip ay. Global kategori filtresini değiştirdikçe bu değer seçilen kategorilere göre güncellenir.'
           )
@@ -460,28 +516,29 @@ window.TABS = (function(){
       h('div',{className:'insight-strip'},
         h('span',{className:'arrow'}, I.ArrowRight(14)),
         h('div',null,
-          hasGlobalFilter ? `Seçili filtrede toplam arama 2024'e kıyasla ` : `2024'e kıyasla toplam arama `,
+          hasGlobalFilter ? `Seçili filtrede son 12 ayda toplam arama önceki 12 aya kıyasla ` : `Son 12 ayda (${R12_RANGE}) toplam arama önceki 12 aya kıyasla `,
           h('strong',null, fmtPct(f_TOTAL_YOY)),
           `. Pazar `, (f_TOTAL_YOY<0?'erimekte':'büyümekte'), ` olarak görünüyor. `,
           h('strong',null, fmtFull(risingCnt)), ` keyword yükselişte - içerik yatırımı ve güncelleme fırsatı olarak değerlendirilebilir. Peak dönem: `,
-          h('strong',null, TR_MONTHS_LONG[f_PEAK_IDX]), `.`
+          h('strong',null, rollingLongLabel(f_PEAK_IDX)), `.`
         )
       ),
 
       // === Aksiyon Kartları (B1) ===
       // Peak-based content timing + rising KW opportunity → concrete next steps
       (() => {
-        const peakIdx = f_PEAK_IDX;
-        // İçerik peak'ten 6 hafta önce canlıda olsun: ~1.5 ay öncesi
-        const targetIdx = (peakIdx - 2 + 12) % 12;
+        const peakIdx = f_PEAK_IDX;  // rolling index
+        // İçerik peak'ten 6 hafta önce canlıda olsun: ~1.5 ay öncesi (takvim ayı olarak)
+        const peakCal = rollingIdxToCalMonth(peakIdx);
+        const targetCal = (peakCal - 2 + 12) % 12;
         return h('div',{className:'action-strip'},
           h('div',{className:'action-card action-calendar'},
             h('div',{className:'action-icon'}, I.Calendar(20)),
             h('div',{className:'action-body'},
               h('div',{className:'action-title'}, 'Peak için içerik takvimi'),
               h('div',{className:'action-text'},
-                'Peak ay ', h('strong',null, TR_MONTHS_LONG[peakIdx]),
-                ' · ranking için ', h('strong',null, TR_MONTHS_LONG[targetIdx]),
+                'Peak ay ', h('strong',null, rollingLongLabel(peakIdx)),
+                ' · ranking için ', h('strong',null, TR_MONTHS_LONG[targetCal]),
                 ' ortasına kadar içeriğin canlıda olması önerilir (4–6 hafta index süresi).'
               )
             )
@@ -531,28 +588,30 @@ window.TABS = (function(){
             h('h3',null,'12 Aylık Toplam Arama Hacmi',
               h(InfoIcon,null,
                 h('strong',null,'Ne gösterir? '),'Seçili kategorilerdeki tüm keywordlerin ayda toplam kaç kere arandığı.',
-                h('br'),h('br'),h('strong',null,'Nasıl okunur? '),'Gri çizgi 2024, coral çizgi 2025. İkisi arasındaki fark büyüme / erime göstergesidir. Kırmızı nokta peak ayı.',
-                h('br'),h('br'),h('strong',null,'Ne için kullanılır? '),'Genel pazar ritmini ve yıllık karşılaştırmayı görmek için kullanılabilir. Peak aydan 4-6 hafta önce içeriğin hazır olması planlanabilir.'
+                h('br'),h('br'),h('strong',null,'Nasıl okunur? '),`Rolling görünümde gri çizgi Önceki 12 Ay (${P12_RANGE}), coral çizgi Son 12 Ay (${R12_RANGE}). Takvim görünümünde 2024 / 2025 / 2026 yıl çizgileri gösterilir (2026 Haziran'a kadar). İkisi arasındaki fark büyüme / erime göstergesidir. Kırmızı nokta peak ayı.`,
+                h('br'),h('br'),h('strong',null,'Ne için kullanılır? '),'Genel pazar ritmini ve dönemsel karşılaştırmayı görmek için kullanılabilir. Peak aydan 4-6 hafta önce içeriğin hazır olması planlanabilir.'
               )
             ),
-            h('div',{className:'hint'}, hasGlobalFilter ? `${globalK1.length} kat. · 2024 & 2025` : '2024 (gri) & 2025 (coral)'),
+            h('div',{className:'hint'}, viewMode === 'calendar' ? '2024 / 2025 / 2026 (coral)' : `Önceki 12 Ay (gri) & Son 12 Ay (coral)`),
             h(Zoomable, {title:'12 Aylık Toplam Arama Hacmi', aspect:'wide'},
-              h(LineChart,{
-                series:[
-                  {name:'2024', values:f_MONTHLY_24, color:'#8A8A8A'},
-                  {name:'2025', values:f_MONTHLY_25, color:'#FF7B52', peakIdx:f_PEAK_IDX}
-                ], legend:true, height:520
-              })
+              (() => {
+                const { series, labels } = lineSeriesFor(viewMode, {
+                  m24: f_MONTHLY_24, m25: f_MONTHLY_25, m26: f_MONTHLY_26,
+                  roll: f_MONTHLY_R12, prev: f_MONTHLY_P12, peakIdx: f_PEAK_IDX
+                });
+                return h(LineChart,{ series, labels, legend:true, height:520 });
+              })()
             )
           ),
           h('div',{style:{flex:1, display:'flex', alignItems:'center', justifyContent:'center', minHeight:420, width:'100%'}},
             h('div',{style:{width:'100%'}},
-              h(LineChart,{
-                series:[
-                  {name:'2024', values:f_MONTHLY_24, color:'#8A8A8A'},
-                  {name:'2025', values:f_MONTHLY_25, color:'#FF7B52', peakIdx:f_PEAK_IDX}
-                ], legend:true, height:400
-              })
+              (() => {
+                const { series, labels } = lineSeriesFor(viewMode, {
+                  m24: f_MONTHLY_24, m25: f_MONTHLY_25, m26: f_MONTHLY_26,
+                  roll: f_MONTHLY_R12, prev: f_MONTHLY_P12, peakIdx: f_PEAK_IDX
+                });
+                return h(LineChart,{ series, labels, legend:true, height:400 });
+              })()
             )
           )
         ),
@@ -566,9 +625,9 @@ window.TABS = (function(){
               )
             ),
             h('div',{className:'hint'},
-              donutLevel === 'kat1' ? '2025 · Kat 1 dağılımı · tıkla & filtrele'
-              : donutLevel === 'kat2' ? `2025 · Kat 2 alt kırılımı · ${donutData.length} kategori`
-              : `2025 · Kat 3 alt kırılımı · ${donutData.length} ürün`
+              donutLevel === 'kat1' ? 'Son 12 Ay · Kat 1 dağılımı · tıkla & filtrele'
+              : donutLevel === 'kat2' ? `Son 12 Ay · Kat 2 alt kırılımı · ${donutData.length} kategori`
+              : `Son 12 Ay · Kat 3 alt kırılımı · ${donutData.length} ürün`
             )
           ),
           h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:12,marginBottom:12, flexWrap:'wrap'}},
@@ -647,15 +706,15 @@ window.TABS = (function(){
           h('rect',{x:3,y:3,width:7,height:7}),h('rect',{x:14,y:3,width:7,height:7}),h('rect',{x:3,y:14,width:7,height:7}),h('rect',{x:14,y:14,width:7,height:7})
         ),
         title:'Sezon Takvimi & Mevsimsel Ritim',
-        desc:'Kategorilerin aylık arama ritmi, 2024↔2025 YoY karşılaştırması ve çeyreklik peak dağılımı.'
+        desc:`Kategorilerin aylık arama ritmi, Son 12 Ay ↔ Önceki 12 Ay karşılaştırması ve çeyreklik peak dağılımı.`
       }),
       h('div',{className:'card', style:{marginBottom:18}},
         h('div',{className:'card-header', style:{flexWrap:'wrap',gap:10}},
           h('h3',{style:{flex:1,minWidth:180}},'Kategori Sezon Takvimi',
             h(InfoIcon,null,
-              h('strong',null,'Ne gösterir? '),'Her satır bir kategori, sütunlar aylar. Üst değer o ayın 2025 arama hacmi, alt rozet ise 2024\'e kıyasla % değişim (YoY).',
+              h('strong',null,'Ne gösterir? '),`Her satır bir kategori, sütunlar aylar. Rolling görünümde eksen ${R12_RANGE} dönemini kapsar; üst değer o ayın Son 12 Ay hacmi, alt rozet bir önceki 12 aylık dönemin aynı ayına kıyasla % değişim (YoY). Takvim görünümünde 2025 yılı ve 2024 karşılaştırması gösterilir.`,
               h('br'),h('br'),h('strong',null,'Renk skalası: '),'Satır içinde normalize edilir - ',h('span',{style:{color:'#e67c73',fontWeight:600}},'kırmızı'),' = o satırın dibi, ',h('span',{style:{color:'#fbbc04',fontWeight:600}},'sarı'),' = orta, ',h('span',{style:{color:'#57bb8a',fontWeight:600}},'yeşil'),' = peak ay.',
-              h('br'),h('br'),h('strong',null,'YoY rozeti: '), h('span',{style:{color:'#065F46',fontWeight:600}},'Yeşil +%'),' 2024\'ten büyüdü, ', h('span',{style:{color:'#991B1B',fontWeight:600}},'kırmızı -%'),' daraldı.',
+              h('br'),h('br'),h('strong',null,'YoY rozeti: '), h('span',{style:{color:'#065F46',fontWeight:600}},'Yeşil +%'),' önceki döneme göre büyüdü, ', h('span',{style:{color:'#991B1B',fontWeight:600}},'kırmızı -%'),' daraldı.',
               h('br'),h('br'),h('strong',null,'Nasıl okunur? '),'Yeşil renk o ay o kategorinin peak dönemi demektir. Hücreye tıklandığında o kategori drill-down olur.',
               h('br'),h('br'),h('strong',null,'Ne için? '),'SEO & pazarlama takvimi kategoriye özel olarak bu ritim dikkate alınarak kurgulanabilir; peak\'ten 4-6 hafta önce içeriğin yayında olması hedeflenebilir.'
             )
@@ -681,13 +740,20 @@ window.TABS = (function(){
           ),
           heatRows.length > 0 && h(Zoomable, {title:'Kategori Sezon Takvimi', aspect:'wide'},
             h('div',{style:{minWidth:720}},
-              h(Heatmap,{rows:heatRows, year:2025, showYoY:true})
+              viewMode === 'calendar'
+                ? h(Heatmap,{rows:heatRows, year:2025, showYoY:true})
+                : h(Heatmap,{rows:heatRows, monthsLabels:ROLLING_LABELS, periodLabel:'Son 12 Ay', prevLabel:'Önceki 12 Ay', showYoY:true})
             )
           )
         ),
         h('div',{className:'heatmap-scroll', style:{overflow:'auto', maxHeight: heatLevel === 'kat1' ? 'none' : 560}},
           h('div',{style:{minWidth:720}},
-            heatRows.length > 0 ? h(Heatmap,{rows:heatRows, year:2025, showYoY:true, onClickCell:(r,i)=>{
+            heatRows.length > 0 ? h(Heatmap,{
+              rows:heatRows,
+              ...(viewMode === 'calendar'
+                ? {year:2025}
+                : {monthsLabels:ROLLING_LABELS, periodLabel:'Son 12 Ay', prevLabel:'Önceki 12 Ay'}),
+              showYoY:true, onClickCell:(r,i)=>{
               if (r.ctx.k3) onNavigateKw({k1:r.ctx.k1, k2:r.ctx.k2, k3:r.ctx.k3});
               else if (r.ctx.k2) onNavigateKw({k1:r.ctx.k1, k2:r.ctx.k2});
               else onNavigateCat(r.ctx.k1);
@@ -702,7 +768,7 @@ window.TABS = (function(){
           )
         ),
         h('div',{className:'txt-3',style:{fontSize:11,marginTop:10}},
-          'Her hücrede ', h('strong',null,'üst:'), ' 2025 arama hacmi, ', h('strong',null,'alt rozet:'), ' 2024\'e kıyasla ', h('strong',null,'YoY%'),' değişim. ',
+          'Her hücrede ', h('strong',null,'üst:'), viewMode === 'calendar' ? ' 2025 arama hacmi, ' : ' Son 12 Ay arama hacmi, ', h('strong',null,'alt rozet:'), viewMode === 'calendar' ? ' 2024\'e kıyasla ' : ' önceki 12 aylık dönemin aynı ayına kıyasla ', h('strong',null,'YoY%'),' değişim. ',
           'Renk: ', h('span',{style:{color:'#e67c73'}},'kırmızı (dip) '), '& ',
           h('span',{style:{color:'#fbbc04'}},'sarı (orta) '), '& ',
           h('span',{style:{color:'#57bb8a'}},'yeşil (peak)'), ' · hücreye tıkla & detay.'
@@ -727,8 +793,8 @@ window.TABS = (function(){
           colSet.add(col);
           if (!colParentK1[col]) colParentK1[col] = k.k1;
           if (!brandMap[k.brand]) brandMap[k.brand] = { brand: k.brand, total: 0, cells: {} };
-          brandMap[k.brand].total += (k.a25 || 0) * 12;
-          brandMap[k.brand].cells[col] = (brandMap[k.brand].cells[col] || 0) + (k.a25 || 0) * 12;
+          brandMap[k.brand].total += (k.r12 || 0) * 12;
+          brandMap[k.brand].cells[col] = (brandMap[k.brand].cells[col] || 0) + (k.r12 || 0) * 12;
         }
         const brands = Object.values(brandMap).sort((a,b) => b.total - a.total);
         const colList = Array.from(colSet).sort();
@@ -829,16 +895,17 @@ window.TABS = (function(){
                 h('br'),h('br'),h('strong',null,'Ne için? '),'Kategoriler arası ritim farkını bir bakışta görmek için kullanılabilir.'
               )
             ),
-            h('div',{className:'hint'},'2025 aylık · tıkla & detay')
+            h('div',{className:'hint'}, (viewMode==='calendar' ? '2025 aylık' : `Son 12 Ay (${R12_RANGE})`) + ' · tıkla & detay')
           ),
           h(SmallMultiples, {
             items: D.kat1Summary.map(k1 => {
               const row = D.kat1Monthly.find(x => (x.labels && x.labels[0] === k1.k1) || x.k1 === k1.k1);
               if (!row) return null;
-              const values = row.m25 || row.val25 || row.val || [];
+              const values = viewMode === 'calendar' ? (row.m25 || []) : rollingOf(row);
               if (!values.length) return null;
-              return { label: k1.k1, values, color: KAT1_COLORS[k1.k1] || 'var(--accent)', yoy: k1.yoy };
+              return { label: k1.k1, values, color: KAT1_COLORS[k1.k1] || 'var(--accent)', yoy: k1.ryoy };
             }).filter(Boolean),
+            monthsLabels: viewMode === 'calendar' ? TR_MONTHS : ROLLING_LABELS,
             onClick: (it) => onNavigateCat(it.label)
           })
         ),
@@ -851,9 +918,11 @@ window.TABS = (function(){
                 h('br'),h('br'),h('strong',null,'Ne için? '),'12 aylık dağılımı doğrusal bir çizgi yerine mevsimsel bir daire olarak görmek için kullanılabilir.'
               )
             ),
-            h('div',{className:'hint'},'2025 · hover & ay detayı')
+            h('div',{className:'hint'}, (viewMode==='calendar' ? '2025' : `Son 12 Ay (${R12_RANGE})`) + ' · hover & ay detayı')
           ),
-          h(PolarPeak, { values: f_MONTHLY_25, color:'var(--coral)', size: 260, year: 2025 })
+          viewMode === 'calendar'
+            ? h(PolarPeak, { values: f_MONTHLY_25, color:'var(--coral)', size: 260 })
+            : h(PolarPeak, { values: f_MONTHLY_R12, monthsLabels: ROLLING_LABELS, color:'var(--coral)', size: 260 })
         )
       ),
 
@@ -863,7 +932,7 @@ window.TABS = (function(){
           h('div',{className:'card-header',style:{flexWrap:'wrap',gap:8}},
             h('h3',{style:{flex:1,minWidth:160}},'Kategori YoY & Kazanan / Kaybeden',
               h(InfoIcon,null,
-                h('strong',null,'Ne gösterir? '),'Her kategorinin 2024\'e kıyasla 2025\'teki % büyüme/düşüşü.',
+                h('strong',null,'Ne gösterir? '),`Her kategorinin önceki 12 aya (${P12_RANGE}) kıyasla son 12 aydaki (${R12_RANGE}) % büyüme/düşüşü.`,
                 h('br'),h('br'),h('strong',null,'Nasıl okunur? '),h('span',{style:{color:'#2E7D32',fontWeight:600}},'Yeşil'),' = büyüdü, ',h('span',{style:{color:'#D32F2F',fontWeight:600}},'kırmızı'),' = daralıyor. Çubuğa tıklandığında o kategorinin keywordlerine filtreli şekilde inilebilir.',
                 h('br'),h('br'),h('strong',null,'Ne için? '),'Yatırım önceliği değerlendirmesi için kullanılabilir. Büyüyen kategoride içerik + reklam önerilebilir; daralan için rakip analizi faydalı olabilir.'
               )
@@ -933,14 +1002,14 @@ window.TABS = (function(){
                   h('span',{style:{fontWeight:500}}, q.label),
                   q.sub && h('span',{className:'txt-3', style:{fontSize:10,marginLeft:6}}, q.sub)
                 ),
-                h('span',{className:'pill q'+q.peakQ, style:{flexShrink:0}}, 'Q'+q.peakQ)
+                h('span',{className:'pill q'+q.peakQ, style:{flexShrink:0}, title:'Son 12 ayın en yüksek hacimli çeyreği'}, qLabel(q.peakQ-1))
               ),
               h(QStack,{q1:q.q1/q.tot, q2:q.q2/q.tot, q3:q.q3/q.tot, q4:q.q4/q.tot})
             ))
           ),
           h('div',{className:'legend', style:{marginTop:14}},
             ['#3B82F6','#EF4444','#F59E0B','#10B981'].map((c,i) =>
-              h('div',{key:i,className:'li'}, h('div',{className:'swatch',style:{background:c}}), 'Q'+(i+1))
+              h('div',{key:i,className:'li'}, h('div',{className:'swatch',style:{background:c}}), qLabel(i))
             )
           )
         )
@@ -951,9 +1020,9 @@ window.TABS = (function(){
         h('div',{className:'card flush'},
           h('div',{className:'card-title-row', style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
             h('h3',null,'Top 10 Hacim Lideri',
-              h(InfoIcon,null,h('strong',null,'Ne? '),'2025\'te en çok aranan 10 kelime. Satıra tıkla → 12 aylık trend grafiği.')
+              h(InfoIcon,null,h('strong',null,'Ne? '),'Son 12 ayda en çok aranan 10 kelime. Satıra tıkla → aylık trend grafiği.')
             ),
-            h('span',{className:'hint'},'2025 ort.')
+            h('span',{className:'hint'},'Son 12 Ay ort.')
           ),
           h('table',{className:'tbl'},
             h('tbody',null,
@@ -963,8 +1032,8 @@ window.TABS = (function(){
                   h('div',{className:'kw-cell'}, k.kw),
                   h('div',{className:'cat-cell'}, k.k1)
                 ),
-                h('td',{className:'num', style:{width:70}}, fmtNum(k.a25)),
-                h('td',{style:{width:60,textAlign:'right'}}, h(YoYPill,{yoy:k.yoy}))
+                h('td',{className:'num', style:{width:70}}, fmtNum(k.r12)),
+                h('td',{style:{width:60,textAlign:'right'}}, h(YoYPill,{yoy:k.ryoy}))
               ))
             )
           )
@@ -972,7 +1041,7 @@ window.TABS = (function(){
         h('div',{className:'card flush'},
           h('div',{className:'card-title-row', style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
             h('h3',null,'En Çok Büyüyen',
-              h(InfoIcon,null,h('strong',null,'Ne? '),'2024\'ten 2025\'e mutlak hacim artışı en yüksek kelimeler. % değil, toplam arama sayısında artış.')
+              h(InfoIcon,null,h('strong',null,'Ne? '),`Önceki 12 aydan (${P12_RANGE}) son 12 aya (${R12_RANGE}) mutlak hacim artışı en yüksek kelimeler. % değil, toplam arama sayısında artış.`)
             ),
             h('span',{className:'hint pill pos', style:{fontSize:10}},'↑ Kazanan')
           ),
@@ -984,7 +1053,7 @@ window.TABS = (function(){
                   h('div',{className:'cat-cell'}, k.k1)
                 ),
                 h('td',{className:'num', style:{width:80, color:'var(--green)'}}, '+'+fmtNum(k.delta)),
-                h('td',{style:{width:50,textAlign:'right'}}, h(YoYPill,{yoy:k.yoy}))
+                h('td',{style:{width:50,textAlign:'right'}}, h(YoYPill,{yoy:k.ryoy}))
               ))
             )
           )
@@ -992,7 +1061,7 @@ window.TABS = (function(){
         h('div',{className:'card flush'},
           h('div',{className:'card-title-row', style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
             h('h3',null,'En Çok Daralan',
-              h(InfoIcon,null,h('strong',null,'Ne? '),'2024\'ten 2025\'e mutlak hacim düşüşü en yüksek kelimeler. Büyük hacimli kelimelerde küçük % bile büyük düşüş demek.')
+              h(InfoIcon,null,h('strong',null,'Ne? '),`Önceki 12 aydan (${P12_RANGE}) son 12 aya (${R12_RANGE}) mutlak hacim düşüşü en yüksek kelimeler. Büyük hacimli kelimelerde küçük % bile büyük düşüş demek.`)
             ),
             h('span',{className:'hint pill neg', style:{fontSize:10}},'↓ Kaybeden')
           ),
@@ -1004,7 +1073,7 @@ window.TABS = (function(){
                   h('div',{className:'cat-cell'}, k.k1)
                 ),
                 h('td',{className:'num', style:{width:80, color:'var(--red)'}}, fmtNum(k.delta)),
-                h('td',{style:{width:50,textAlign:'right'}}, h(YoYPill,{yoy:k.yoy}))
+                h('td',{style:{width:50,textAlign:'right'}}, h(YoYPill,{yoy:k.ryoy}))
               ))
             )
           )
@@ -1015,6 +1084,7 @@ window.TABS = (function(){
 
   // === Kategoriler Tab ===
   function KategorilerTab({filter, setFilter, onNavigateKw, globalFilter}) {
+    const viewMode = globalFilter?.viewMode || 'rolling';
     const [level, setLevel] = React.useState('kat1');
     const [catSort, setCatSort] = React.useState('vol');  // vol | yoyDesc | yoyAsc | alpha
     // Multi-selects - independent per level
@@ -1063,9 +1133,9 @@ window.TABS = (function(){
     });
     const sorted = React.useMemo(() => {
       const s = [...scoped];
-      if (catSort === 'vol') return s.sort((a,b) => (b.a25||0) - (a.a25||0));
-      if (catSort === 'yoyDesc') return s.sort((a,b) => (b.yoy||0) - (a.yoy||0));
-      if (catSort === 'yoyAsc') return s.sort((a,b) => (a.yoy||0) - (b.yoy||0));
+      if (catSort === 'vol') return s.sort((a,b) => (b.r12||0) - (a.r12||0));
+      if (catSort === 'yoyDesc') return s.sort((a,b) => (b.ryoy||0) - (a.ryoy||0));
+      if (catSort === 'yoyAsc') return s.sort((a,b) => (a.ryoy||0) - (b.ryoy||0));
       if (catSort === 'alpha') return s.sort((a,b) => (a.labels[a.labels.length-1]||'').localeCompare(b.labels[b.labels.length-1]||'', 'tr'));
       return s;
     }, [scoped, catSort]);
@@ -1081,19 +1151,23 @@ window.TABS = (function(){
     }, [multiK1, multiK2, multiK3]);
     const line25 = aggregateMonthly(lineKeywords, 'm25');
     const line24 = aggregateMonthly(lineKeywords, 'm24');
-    const linePeak = line25.indexOf(Math.max(...line25));
-    const lineTotal25 = line25.reduce((a,b)=>a+b,0);
-    const lineTotal24 = line24.reduce((a,b)=>a+b,0);
-    const lineYoY = lineTotal24 ? (lineTotal25 - lineTotal24) / lineTotal24 : 0;
+    const line26 = aggregateMonthly(lineKeywords, 'm26').slice(0, N26);
+    const lineR12 = aggregateRolling(lineKeywords, 'last');
+    const lineP12 = aggregateRolling(lineKeywords, 'prev');
+    const linePeak = lineR12.indexOf(Math.max(...lineR12));  // rolling index
+    const lineTotalR12 = lineR12.reduce((a,b)=>a+b,0);
+    const lineTotalP12 = lineP12.reduce((a,b)=>a+b,0);
+    const lineYoY = lineTotalP12 ? (lineTotalR12 - lineTotalP12) / lineTotalP12 : 0;
 
     // Multi-series when multiple Kat1s are selected (and no deeper filter)
     const multiLineSeries = React.useMemo(() => {
       if (multiK1.length < 2 || activeK2Set || activeK3Set) return null;
       return multiK1.slice(0, 8).map(k1 => {
         const kws = D.keywords.filter(k => k.k1 === k1);
-        return { name:k1, values: aggregateMonthly(kws, 'm25'), color: katColor(k1) };
+        const values = viewMode === 'calendar' ? aggregateMonthly(kws, 'm25') : aggregateRolling(kws, 'last');
+        return { name:k1, values, color: katColor(k1), pointLabels: viewMode === 'calendar' ? calLabelsFor('25') : ROLLING_LABELS };
       });
-    }, [multiK1, multiK2, multiK3]);
+    }, [multiK1, multiK2, multiK3, viewMode]);
 
     const clearAll = () => { setMultiK1([]); setMultiK2([]); setMultiK3([]); setFilter({}); };
 
@@ -1107,33 +1181,34 @@ window.TABS = (function(){
           h('h3',null,'12 Aylık Toplam Arama Hacmi',
             h(InfoIcon,{title:'12 Aylık Toplam Arama Hacmi'},
               h('p',null,h('strong',null,'Ne gösterir? '),'Üstteki filtrelere göre, seçili kategorilerdeki aylık toplam arama hacmi.'),
-              h('p',null,h('strong',null,'Nasıl okunur? '), multiK1.length > 1 && !activeK2Set && !activeK3Set ? 'Her çizgi bir Kat 1 kategorisini temsil eder; renkler legend üzerinden takip edilebilir.' : 'Gri çizgi 2024 toplam hacmini, coral çizgi 2025 toplam hacmini gösterir. Kırmızı nokta yılın peak ayıdır.'),
-              h('p',null,h('strong',null,'Hangi veriler? '),'Y ekseni: aylık ', h('strong',null,'arama hacmi'),' (toplam arama sayısı). X ekseni: 12 ay (Ocak–Aralık).'),
+              h('p',null,h('strong',null,'Nasıl okunur? '), multiK1.length > 1 && !activeK2Set && !activeK3Set ? 'Her çizgi bir Kat 1 kategorisini temsil eder; renkler legend üzerinden takip edilebilir.' : `Rolling görünümde gri çizgi Önceki 12 Ay (${P12_RANGE}), coral çizgi Son 12 Ay (${R12_RANGE}) toplam hacmini gösterir; takvim görünümünde 2024/2025/2026 yıl çizgileri. Kırmızı nokta peak ayıdır.`),
+              h('p',null,h('strong',null,'Hangi veriler? '),'Y ekseni: aylık ', h('strong',null,'arama hacmi'),' (toplam arama sayısı). X ekseni: 12 ay.'),
               h('div',{className:'info-note'},h('strong',null,'Ne için? '),'Seçili kategorilerin 12 aylık ritmi izlenerek içerik & kampanya takvimi planlanabilir; peak aydan 4-6 hafta önce içeriğin yayında olması hedeflenebilir.')
             )
           ),
           h('div',{className:'hint'},
-            !multiK1.length && !multiK2.length && !multiK3.length ? 'Tüm kategoriler · 2024 & 2025' :
-            multiLineSeries ? `${multiK1.length} kategori karşılaştırması · 2025` :
-            'Filtreli · 2024 & 2025'
+            (!multiK1.length && !multiK2.length && !multiK3.length ? 'Tüm kategoriler' :
+             multiLineSeries ? `${multiK1.length} kategori karşılaştırması` : 'Filtreli')
+            + ' · ' + (viewMode==='calendar' ? '2024-2026' : 'Son vs Önceki 12 Ay')
           )
         ),
         h('div',{style:{display:'flex',justifyContent:'center',width:'100%'}},
           h('div',{style:{width:'100%',maxWidth:1000}},
             multiLineSeries
-              ? h(LineChart,{ series: multiLineSeries, legend:true, height:200 })
-              : h(LineChart,{
-                  series:[
-                    {name:'2024', values:line24, color:'#8A8A8A'},
-                    {name:'2025', values:line25, color:'#FF7B52', peakIdx:linePeak}
-                  ], legend:true, height:200
-                })
+              ? h(LineChart,{ series: multiLineSeries, labels: viewMode==='calendar' ? TR_MONTHS : ROLLING_LABELS, legend:true, height:200 })
+              : (() => {
+                  const { series, labels } = lineSeriesFor(viewMode, {
+                    m24: line24, m25: line25, m26: line26,
+                    roll: lineR12, prev: lineP12, peakIdx: linePeak
+                  });
+                  return h(LineChart,{ series, labels, legend:true, height:200 });
+                })()
           )
         ),
         h('div',{style:{display:'flex',gap:20,marginTop:10,flexWrap:'wrap',fontSize:12,color:'var(--ink-2)'}},
-          h('div',null, 'Toplam 2025: ', h('strong',{className:'num'}, fmtNum(lineTotal25))),
+          h('div',null, 'Toplam Son 12 Ay: ', h('strong',{className:'num'}, fmtNum(lineTotalR12))),
           !multiLineSeries && h('div',null, 'YoY: ', h(YoYPill, {yoy: lineYoY, type:'YoY'})),
-          h('div',null, 'Peak ay: ', h('strong',null, TR_MONTHS_LONG[linePeak]))
+          h('div',null, 'Peak ay: ', h('strong',null, rollingLongLabel(linePeak)))
         )
       ),
 
@@ -1141,14 +1216,14 @@ window.TABS = (function(){
         h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
           h('h3',{style:{flex:1, minWidth:200}}, `${level==='kat1'?'Kat 1':level==='kat2'?'Kat 2':'Kat 3'} Sezon Takvimi`,
             h(InfoIcon,{title:'Sezon Takvimi (Heatmap)'},
-              h('p',null,h('strong',null,'Ne gösterir? '),'Her satır bir kategori, her sütun bir aydır. Hücrenin üst kısmında 2025 arama hacmi, alt rozetinde ise 2024\'e kıyasla değişim (YoY%) yer alır.'),
+              h('p',null,h('strong',null,'Ne gösterir? '),`Her satır bir kategori, her sütun bir aydır. Rolling görünümde eksen ${R12_RANGE} dönemini kapsar; hücrenin üst kısmında Son 12 Ay arama hacmi, alt rozetinde önceki 12 aylık dönemin aynı ayına kıyasla değişim (YoY%) yer alır.`),
               h('p',null,h('strong',null,'Renk skalası: '),
                 h('span',{style:{color:'#e67c73',fontWeight:600}},'kırmızı'), ' = o satırın en düşük ayı, ',
                 h('span',{style:{color:'#fbbc04',fontWeight:600}},'sarı'), ' = orta, ',
                 h('span',{style:{color:'#57bb8a',fontWeight:600}},'yeşil'), ' = peak ay.'
               ),
               h('p',null,h('strong',null,'YoY rozeti: '),
-                h('span',{style:{color:'#065F46',fontWeight:600}},'Yeşil +%'), ' 2024\'ten büyüdüğünü, ',
+                h('span',{style:{color:'#065F46',fontWeight:600}},'Yeşil +%'), ' önceki döneme göre büyüdüğünü, ',
                 h('span',{style:{color:'#991B1B',fontWeight:600}},'kırmızı −%'), ' daraldığını gösterir.'
               ),
               h('p',null,h('strong',null,'Kontroller: '),'Üstteki Kat 1/2/3 segmented, hangi kategori seviyesinde gösterileceğini değiştirir. Sıralama segmented (Hacim ↓ / YoY ↑ / YoY ↓ / A-Z) satır sırasını değiştirir.'),
@@ -1171,14 +1246,16 @@ window.TABS = (function(){
           h('span',{className:'hint'}, `${sorted.length} kategori`),
           h(CopyButton, {
             getData: () => ({
-              headers: ['Kategori', '2024 Avg', '2025 Avg', 'YoY %', 'Peak Ay', ...TR_MONTHS.map(m => m+' 2025')],
+              headers: ['Kategori', 'Önceki 12 Ay Ort', 'Son 12 Ay Ort', 'YoY %', 'Peak Ay', '2024 Avg', '2025 Avg', ...ROLLING_LABELS],
               rows: sorted.map(r => {
-                const peakIdx = r.m25 ? r.m25.indexOf(Math.max(...r.m25)) : -1;
+                const roll = rollingOf(r);
+                const peakIdx = roll.length ? roll.indexOf(Math.max(...roll)) : -1;
                 return [
                   r.labels.join(' > '),
-                  r.a24, r.a25, (r.yoy*100).toFixed(2)+'%',
-                  peakIdx >= 0 ? TR_MONTHS[peakIdx] : '',
-                  ...(r.m25 || [])
+                  r.p12, r.r12, ((r.ryoy||0)*100).toFixed(2)+'%',
+                  peakIdx >= 0 ? ROLLING_LABELS[peakIdx] : '',
+                  r.a24, r.a25,
+                  ...roll
                 ];
               })
             })
@@ -1186,10 +1263,12 @@ window.TABS = (function(){
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
             const csv = toCSV(sorted, [
               {label:'Kategori', get:r=>r.labels.join(' > ')},
+              {label:'Önceki 12 Ay Ort', key:'p12'},
+              {label:'Son 12 Ay Ort', key:'r12'},
+              {label:'YoY', get:r=>r.ryoy?.toFixed(4)},
               {label:'2024 Avg', key:'a24'},
               {label:'2025 Avg', key:'a25'},
-              {label:'YoY', get:r=>r.yoy?.toFixed(4)},
-              ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
+              ...ROLLING_LABELS.map((m,i)=>({label:m, get:r=>rollingOf(r)[i]}))
             ]);
             downloadCSV(`${BRAND_SLUG}-${level}.csv`, csv);
           }}, '↓ CSV')
@@ -1198,19 +1277,26 @@ window.TABS = (function(){
           h('div',{style:{minWidth:720}},
             sorted.length > 0 ? h(Heatmap,{
               rows: sorted.map(r => {
-                const peakIdx = r.m25.indexOf(Math.max(...r.m25));
+                const values = viewMode === 'calendar' ? r.m25 : rollingOf(r);
+                const prevValues = viewMode === 'calendar'
+                  ? m24ForLabels(level, r.labels)
+                  : p12ForLabels(level, r.labels);
+                const peakIdx = values.indexOf(Math.max(...values));
                 return {
                   label: level==='kat1' ? r.labels[0] : r.labels.slice(-1)[0],
                   sub: level!=='kat1' ? r.labels.slice(0,-1).join(' > ') : null,
-                  values: r.m25, prevValues: r.m24 || m24ForLabels(level, r.labels), peakIdx
+                  values, prevValues, peakIdx
                 };
               }),
-              showValues: true, year: 2025, showYoY: true,
+              showValues: true, showYoY: true,
+              ...(viewMode === 'calendar'
+                ? {year: 2025}
+                : {monthsLabels: ROLLING_LABELS, periodLabel:'Son 12 Ay', prevLabel:'Önceki 12 Ay'}),
             }) : h('div',{className:'empty'}, 'Sonuç yok')
           )
         ),
         h('div',{className:'txt-3',style:{fontSize:11,marginTop:10}},
-          'Her hücrede ', h('strong',null,'üst:'), ' 2025 arama hacmi, ', h('strong',null,'alt rozet:'), ' 2024\'e kıyasla ', h('strong',null,'YoY%'),' değişim. ',
+          'Her hücrede ', h('strong',null,'üst:'), viewMode === 'calendar' ? ' 2025 arama hacmi, ' : ' Son 12 Ay arama hacmi, ', h('strong',null,'alt rozet:'), viewMode === 'calendar' ? ' 2024\'e kıyasla ' : ' önceki 12 aylık dönemin aynı ayına kıyasla ', h('strong',null,'YoY%'),' değişim. ',
           'Renk: ', h('span',{style:{color:'#e67c73'}},'kırmızı (dip) '), '& ',
           h('span',{style:{color:'#fbbc04'}},'sarı (orta) '), '& ',
           h('span',{style:{color:'#57bb8a'}},'yeşil (peak)'), '.',
@@ -1225,8 +1311,8 @@ window.TABS = (function(){
             h('thead',null,
               h('tr',null,
                 h('th',null,'Kategori'),
-                h('th',{className:'num col-hide-sm'}, '2024'),
-                h('th',{className:'num'}, '2025'),
+                h('th',{className:'num col-hide-sm'}, 'Önceki 12 Ay'),
+                h('th',{className:'num'}, 'Son 12 Ay'),
                 h('th',{className:'num'}, 'YoY'),
                 h('th',{className:'col-hide-sm'},'12 Ay Trend'),
                 h('th',{className:'col-hide-sm'},'Peak Ç.'),
@@ -1235,8 +1321,10 @@ window.TABS = (function(){
             ),
             h('tbody',null,
               sorted.map((r,i) => {
-                const peakIdx = r.m25.indexOf(Math.max(...r.m25));
-                const peakQIdx = r.pq?.indexOf(1);
+                const roll = rollingOf(r);
+                const peakIdx = roll.indexOf(Math.max(...roll));
+                // Peak çeyrek = son 12 ayda en yüksek hacimli takvim çeyreği
+                const peakQIdx = peakQuarterIdx(roll);
                 return h('tr',{key:i, className:'clickable', onClick:() => {
                   if (level==='kat1') { setFilter({k1:r.labels[0]}); setLevel('kat2'); }
                   else if (level==='kat2') { setFilter({k1:r.labels[0], k2:r.labels[1]}); setLevel('kat3'); }
@@ -1250,18 +1338,18 @@ window.TABS = (function(){
                         level!=='kat1' && h('div',{className:'cat-cell'}, r.labels.slice(0,-1).join(' > ')),
                         // Mobilde gizlenmiş metrikler buraya meta-satır olarak düşer
                         h('div',{className:'kw-mobile-meta'},
-                          h('span',null, fmtNum(r.m25[peakIdx]), ' · ', TR_MONTHS[peakIdx]),
-                          peakQIdx>=0 && h('span',{className:'pill q'+(peakQIdx+1), style:{fontSize:9, padding:'1px 5px', marginLeft:6}}, 'Q'+(peakQIdx+1))
+                          h('span',null, fmtNum(roll[peakIdx]), ' · ', ROLLING_LABELS[peakIdx]),
+                          peakQIdx>=0 && h('span',{className:'pill q'+(peakQIdx+1), style:{fontSize:9, padding:'1px 5px', marginLeft:6}}, qLabel(peakQIdx))
                         )
                       )
                     )
                   ),
-                  h('td',{className:'num col-hide-sm'}, fmtFull(r.a24)),
-                  h('td',{className:'num'}, fmtFull(r.a25)),
-                  h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
-                  h('td',{className:'col-hide-sm', style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:28})),
-                  h('td',{className:'col-hide-sm'}, peakQIdx>=0 ? h('span',{className:'pill q'+(peakQIdx+1)}, 'Q'+(peakQIdx+1)) : '-'),
-                  h('td',{className:'col-hide-sm', style:{fontSize:12,color:'var(--ink-2)'}}, TR_MONTHS[peakIdx]+' · '+fmtNum(r.m25[peakIdx]))
+                  h('td',{className:'num col-hide-sm'}, fmtFull(r.p12)),
+                  h('td',{className:'num'}, fmtFull(r.r12)),
+                  h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
+                  h('td',{className:'col-hide-sm', style:{width:110}}, h(Sparkline,{values:roll, w:100, h:28})),
+                  h('td',{className:'col-hide-sm'}, peakQIdx>=0 ? h('span',{className:'pill q'+(peakQIdx+1), title:'Son 12 ayın en yüksek hacimli çeyreği'}, qLabel(peakQIdx)) : '-'),
+                  h('td',{className:'col-hide-sm', style:{fontSize:12,color:'var(--ink-2)'}}, ROLLING_LABELS[peakIdx]+' · '+fmtNum(roll[peakIdx]))
                 );
               })
             )
@@ -1275,7 +1363,7 @@ window.TABS = (function(){
   function KeywordTab({setKeywordModal, initialFilter, clearInitialFilter, globalFilter}) {
     // Filter state: sadece keyword arama + sort tab-level, Kat/Marka/Peak/Çeyrek/Bucket/Trend globalde.
     const [q, setQ] = React.useState('');
-    const [sort, setSort] = React.useState({k:'a25', d:-1});
+    const [sort, setSort] = React.useState({k:'r12', d:-1});
     const [page, setPage] = React.useState(0);
     const perPage = 50;
 
@@ -1315,11 +1403,11 @@ window.TABS = (function(){
     const pageRows = filtered.slice(page*perPage, (page+1)*perPage);
     const totalPages = Math.ceil(filtered.length/perPage);
 
-    const sumVol = filtered.reduce((a,k)=>a+(k.a25||0),0)*12;
-    const sumVol24 = filtered.reduce((a,k)=>a+(k.a24||0),0)*12;
-    const sumYoY = sumVol24 ? (sumVol - sumVol24) / sumVol24 : 0;
-    const risingInView = filtered.filter(k=>k.yoy>0.05).length;
-    const fallingInView = filtered.filter(k=>k.yoy<-0.05).length;
+    const sumVol = filtered.reduce((a,k)=>a+(k.r12||0),0)*12;
+    const sumVolPrev = filtered.reduce((a,k)=>a+(k.p12||0),0)*12;
+    const sumYoY = sumVolPrev ? (sumVol - sumVolPrev) / sumVolPrev : 0;
+    const risingInView = filtered.filter(k=>k.ryoy>0.05).length;
+    const fallingInView = filtered.filter(k=>k.ryoy<-0.05).length;
 
     const th = (label, k, numCol=false) => h('th', {
       className:numCol?'num':'',
@@ -1334,22 +1422,27 @@ window.TABS = (function(){
         h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
         h(CopyButton, {
           getData: () => ({
-            headers: ['Keyword','Marka','Kat 1','Kat 2','Kat 3','2024 Avg','2025 Avg','YoY %','Bucket','Peak Ay','Peak Çeyrek'],
-            rows: filtered.map(r => [
-              r.kw, r.brand||'', r.k1, r.k2, r.k3,
-              r.a24, r.a25, (r.yoy*100).toFixed(2)+'%', r.bucket||'',
-              r.m25 ? TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))] : '',
-              r.m25 ? 'Q'+(Math.floor(r.m25.indexOf(Math.max(...r.m25))/3)+1) : ''
-            ])
+            headers: ['Keyword','Marka','Kat 1','Kat 2','Kat 3','Önceki 12 Ay Ort','Son 12 Ay Ort','YoY %','Bucket','Peak Ay','Peak Çeyrek'],
+            rows: filtered.map(r => {
+              const roll = rollingOf(r);
+              const pi = roll.indexOf(Math.max(...roll));
+              return [
+                r.kw, r.brand||'', r.k1, r.k2, r.k3,
+                r.p12, r.r12, ((r.ryoy||0)*100).toFixed(2)+'%', r.bucket||'',
+                ROLLING_LABELS[pi] || '',
+                qLabel(peakQuarterIdx(roll))
+              ];
+            })
           })
         }),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
             {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
-            {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'}, {label:'Bucket',key:'bucket'},
-            {label:'Peak Ay', get:r=>TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))]},
-            {label:'Peak Çeyrek', get:r=>'Q'+(Math.floor(r.m25.indexOf(Math.max(...r.m25))/3)+1)},
-            ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
+            {label:'Önceki 12 Ay Ort',key:'p12'}, {label:'Son 12 Ay Ort',key:'r12'}, {label:'YoY',key:'ryoy'}, {label:'Bucket',key:'bucket'},
+            {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'},
+            {label:'Peak Ay', get:r=>{const roll=rollingOf(r); return ROLLING_LABELS[roll.indexOf(Math.max(...roll))];}},
+            {label:'Peak Çeyrek', get:r=>qLabel(peakQuarterIdx(rollingOf(r)))},
+            ...ROLLING_LABELS.map((m,i)=>({label:m, get:r=>rollingOf(r)[i]}))
           ]);
           downloadCSV(`${BRAND_SLUG}-keywords.csv`, csv);
         }}, '↓ CSV'),
@@ -1357,7 +1450,7 @@ window.TABS = (function(){
 
       h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:14}},
         h(Kpi,{label:'Filtrelenen KW', value:fmtNum(filtered.length), sub:`${TOTAL_KW} toplam içinden`, accent:true}),
-        h(Kpi,{label:'Toplam Hacim', value:fmtNum(sumVol), chip:fmtPct(sumYoY), chipClass:trendClass(sumYoY), sub:'2025 toplam'}),
+        h(Kpi,{label:'Toplam Hacim', value:fmtNum(sumVol), chip:fmtPct(sumYoY), chipClass:trendClass(sumYoY), sub:'Son 12 Ay toplam'}),
         h(Kpi,{label:'Yükselen', value:fmtNum(risingInView), chip:'↑', chipClass:'pos', sub:'görünen içinde'}),
         h(Kpi,{label:'Düşen', value:fmtNum(fallingInView), chip:'↓', chipClass:'neg', sub:'görünen içinde'}),
       ),
@@ -1371,9 +1464,9 @@ window.TABS = (function(){
                 th('Kat 1','k1'),
                 th('Kat 2','k2'),
                 th('Kat 3','k3'),
-                th('2024','a24',true),
-                th('2025','a25',true),
-                th('YoY','yoy',true),
+                th('Önceki 12 Ay','p12',true),
+                th('Son 12 Ay','r12',true),
+                th('YoY','ryoy',true),
                 h('th',null,'12 Ay Trend'),
                 h('th',null,'Peak Ay'),
                 h('th',null,'Peak Ç.'),
@@ -1383,8 +1476,9 @@ window.TABS = (function(){
             h('tbody',null,
               pageRows.length === 0 && h('tr',null, h('td',{colSpan:11, className:'empty'}, 'Sonuç bulunamadı')),
               pageRows.map((r,i) => {
-                const peakIdx = r.m25.indexOf(Math.max(...r.m25));
-                const peakQ = Math.floor(peakIdx / 3) + 1;
+                const roll = rollingOf(r);
+                const peakIdx = roll.indexOf(Math.max(...roll));
+                const peakQ = peakQuarterIdx(roll) + 1;
                 return h('tr',{key:page*perPage+i, className:'clickable', onClick:()=>setKeywordModal(r)},
                   h('td',{className:'kw-cell', style:{maxWidth:220}}, r.kw),
                   h('td',{style:{fontSize:11}},
@@ -1395,12 +1489,12 @@ window.TABS = (function(){
                   ),
                   h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
                   h('td',{style:{fontSize:11,color:'var(--ink-3)'}}, r.k3),
-                  h('td',{className:'num'}, fmtFull(r.a24)),
-                  h('td',{className:'num'}, fmtFull(r.a25)),
-                  h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
-                  h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
-                  h('td',null, h('span',{className:'pill neu'}, TR_MONTHS[peakIdx])),
-                  h('td',null, h('span',{className:'pill q'+peakQ}, 'Q'+peakQ)),
+                  h('td',{className:'num'}, fmtFull(r.p12)),
+                  h('td',{className:'num'}, fmtFull(r.r12)),
+                  h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
+                  h('td',{style:{width:110}}, h(Sparkline,{values:roll, w:100, h:26})),
+                  h('td',null, h('span',{className:'pill neu'}, ROLLING_LABELS[peakIdx])),
+                  h('td',null, h('span',{className:'pill q'+peakQ, title:'Son 12 ayın en yüksek hacimli çeyreği'}, qLabel(peakQ-1))),
                   h('td',null, h('span',{className:'cat-pill'}, r.bucket))
                 );
               })
@@ -1437,12 +1531,12 @@ window.TABS = (function(){
       applyGlobalFilter(D.keywords, globalFilter, sezTypeMap)
     , [globalFilter, sezTypeMap]);
 
-    const risingAll = React.useMemo(() => filteredKws.filter(k => k.yoy > 0.05), [filteredKws]);
-    const fallingAll = React.useMemo(() => filteredKws.filter(k => k.yoy < -0.05), [filteredKws]);
+    const risingAll = React.useMemo(() => filteredKws.filter(k => k.ryoy > 0.05), [filteredKws]);
+    const fallingAll = React.useMemo(() => filteredKws.filter(k => k.ryoy < -0.05), [filteredKws]);
 
     // Most changed
-    const topRising = React.useMemo(() => [...risingAll].sort((a,b) => b.yoy - a.yoy), [risingAll]);
-    const topFalling = React.useMemo(() => [...fallingAll].sort((a,b) => a.yoy - b.yoy), [fallingAll]);
+    const topRising = React.useMemo(() => [...risingAll].sort((a,b) => b.ryoy - a.ryoy), [risingAll]);
+    const topFalling = React.useMemo(() => [...fallingAll].sort((a,b) => a.ryoy - b.ryoy), [fallingAll]);
 
     const activeRows = tab === 'rising' ? topRising : topFalling;
     const safeLimit = Math.min(limit, activeRows.length);
@@ -1494,12 +1588,12 @@ window.TABS = (function(){
           (!c.k2 || x.k2 === c.k2) &&
           (!c.k3 || x.k3 === c.k3)
         );
-        const ri = items.filter(x=>x.yoy>0.05).length;
-        const fa = items.filter(x=>x.yoy<-0.05).length;
+        const ri = items.filter(x=>x.ryoy>0.05).length;
+        const fa = items.filter(x=>x.ryoy<-0.05).length;
         const st = items.length - ri - fa;
-        const totVol = items.reduce((a,b)=>a+(b.a25||0),0)*12;
-        const totVol24 = items.reduce((a,b)=>a+(b.a24||0),0)*12;
-        const yoy = totVol24 ? (totVol-totVol24)/totVol24 : 0;
+        const totVol = items.reduce((a,b)=>a+(b.r12||0),0)*12;
+        const totVolPrev = items.reduce((a,b)=>a+(b.p12||0),0)*12;
+        const yoy = totVolPrev ? (totVol-totVolPrev)/totVolPrev : 0;
         return {...c, rising:ri, stable:st, falling:fa, total:items.length, yoy, color:katColor(c.k1), totVol};
       }).filter(c => c.total > 0).sort((a,b) => b.total - a.total).slice(0, 20);
     }, [trendCatLevel, trendCatFilter, filteredKws]);
@@ -1510,19 +1604,19 @@ window.TABS = (function(){
 
     return h('div',null,
       (() => {
-        // Dynamic YoY stats on the FILTERED set
+        // Dynamic YoY stats on the FILTERED set (rolling: Son 12 Ay vs Önceki 12 Ay)
         const nFil = filteredKws.length || 1;
-        const avgYoY = filteredKws.reduce((a,b)=>a+(b.yoy||0),0) / nFil;
-        const totVol25 = filteredKws.reduce((a,b)=>a+(b.a25||0),0) * 12;
-        const totVol24 = filteredKws.reduce((a,b)=>a+(b.a24||0),0) * 12;
-        const filYoY = totVol24 ? (totVol25-totVol24)/totVol24 : 0;
+        const avgYoY = filteredKws.reduce((a,b)=>a+(b.ryoy||0),0) / nFil;
+        const totVolR12 = filteredKws.reduce((a,b)=>a+(b.r12||0),0) * 12;
+        const totVolP12 = filteredKws.reduce((a,b)=>a+(b.p12||0),0) * 12;
+        const filYoY = totVolP12 ? (totVolR12-totVolP12)/totVolP12 : 0;
         return h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
           h(Kpi,{label:'Yükselen KW', value:fmtFull(risingAll.length), chip:'↑', chipClass:'pos', sub:'YoY > +5%', accent:true}),
           h(Kpi,{label:'Düşen KW', value:fmtFull(fallingAll.length), chip:'↓', chipClass:'neg', sub:'YoY < -5%'}),
           h(Kpi,{label:'Filtrelenen', value:fmtFull(filteredKws.length), chip: fmtPct(avgYoY,0), chipClass: trendClass(avgYoY), sub: 'ortalama YoY'}),
-          h(Kpi,{label:'Filtrelenen YoY', value: fmtPct(filYoY,1), chip: filYoY>=0?'↑':'↓', chipClass: trendClass(filYoY), sub: 'hacim: ' + fmtNum(totVol25)}),
-          h(Kpi,{label:'En Çok Artan', value: topChangedUp?.kw || '–', chip: topChangedUp ? fmtPct(topChangedUp.yoy, 0) : null, chipClass: topChangedUp ? 'pos' : 'neu', sub: topChangedUp ? '2025 ort. ' + fmtNum(topChangedUp.a25 || 0) : ''}),
-          h(Kpi,{label:'En Çok Düşen', value: topChangedDown?.kw || '–', chip: topChangedDown ? fmtPct(topChangedDown.yoy, 0) : null, chipClass: topChangedDown ? 'neg' : 'neu', sub: topChangedDown ? '2025 ort. ' + fmtNum(topChangedDown.a25 || 0) : ''}),
+          h(Kpi,{label:'Filtrelenen YoY', value: fmtPct(filYoY,1), chip: filYoY>=0?'↑':'↓', chipClass: trendClass(filYoY), sub: 'hacim: ' + fmtNum(totVolR12)}),
+          h(Kpi,{label:'En Çok Artan', value: topChangedUp?.kw || '–', chip: topChangedUp ? fmtPct(topChangedUp.ryoy, 0) : null, chipClass: topChangedUp ? 'pos' : 'neu', sub: topChangedUp ? 'Son 12 Ay ort. ' + fmtNum(topChangedUp.r12 || 0) : ''}),
+          h(Kpi,{label:'En Çok Düşen', value: topChangedDown?.kw || '–', chip: topChangedDown ? fmtPct(topChangedDown.ryoy, 0) : null, chipClass: topChangedDown ? 'neg' : 'neu', sub: topChangedDown ? 'Son 12 Ay ort. ' + fmtNum(topChangedDown.r12 || 0) : ''}),
         );
       })(),
 
@@ -1531,11 +1625,11 @@ window.TABS = (function(){
       // büyüyen keyword'ler için dikkat çeken compact strip.
       (() => {
         const stars = filteredKws
-          .filter(k => k.yoy >= 1.0 && (k.a25 || 0) >= 100)  // min hacim 100/ay - gürültüyü keser
-          .sort((a, b) => b.yoy - a.yoy)
+          .filter(k => k.ryoy >= 1.0 && (k.r12 || 0) >= 100)  // min hacim 100/ay - gürültüyü keser
+          .sort((a, b) => b.ryoy - a.ryoy)
           .slice(0, 8);
         if (stars.length === 0) return null;
-        const topYoY = stars[0].yoy;
+        const topYoY = stars[0].ryoy;
         return h('div',{className:'card card-stars', style:{marginBottom:18, position:'relative', overflow:'hidden'}},
           h('div',{className:'card-title-row', style:{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap'}},
             h('div',{style:{display:'flex', alignItems:'center', gap:10, minWidth:0}},
@@ -1554,21 +1648,22 @@ window.TABS = (function(){
           ),
           h('div',{className:'stars-grid'},
             stars.map((k, i) => {
-              const peakIdx = k.m25.indexOf(Math.max(...k.m25));
+              const roll = rollingOf(k);
+              const peakIdx = roll.indexOf(Math.max(...roll));
               return h('button',{
                 key: i, className:'star-item', onClick: () => setKeywordModal(k)
               },
                 h('div',{className:'star-head'},
                   h('div',{style:{width:6, height:6, borderRadius:2, background: katColor(k.k1), flexShrink:0}}),
                   h('div',{className:'star-kw'}, k.kw),
-                  h('span',{className:'star-yoy'}, '+', fmtPct(k.yoy, 0).replace('+',''))
+                  h('span',{className:'star-yoy'}, '+', fmtPct(k.ryoy, 0).replace('+',''))
                 ),
                 h('div',{className:'star-meta'},
                   h('span',{className:'star-cat'}, k.k1, k.k2 ? ' > ' + k.k2 : ''),
-                  h('span',{className:'star-vol'}, fmtNum(k.a25), '/ay'),
-                  h('span',{className:'star-peak'}, 'Peak: ', TR_MONTHS[peakIdx])
+                  h('span',{className:'star-vol'}, fmtNum(k.r12), '/ay'),
+                  h('span',{className:'star-peak'}, 'Peak: ', ROLLING_LABELS[peakIdx])
                 ),
-                h(Sparkline, {values: k.m25, w: 110, h: 22})
+                h(Sparkline, {values: roll, w: 110, h: 22})
               );
             })
           )
@@ -1601,7 +1696,7 @@ window.TABS = (function(){
                   h('th',{style:{width:34}}, '#'),
                   h('th',null,'Keyword'),
                   h('th',null,'Kategori'),
-                  h('th',{className:'num'}, '2025 ort.'),
+                  h('th',{className:'num'}, 'Son 12 Ay ort.'),
                   h('th',{className:'num'}, 'YoY')
                 )
               ),
@@ -1616,8 +1711,8 @@ window.TABS = (function(){
                       h('span',null, r.k1 + (r.k2 ? ' > ' + r.k2 : ''))
                     )
                   ),
-                  h('td',{className:'num'}, fmtFull(r.a25)),
-                  h('td',null, h(YoYPill,{yoy:r.yoy}))
+                  h('td',{className:'num'}, fmtFull(r.r12)),
+                  h('td',null, h(YoYPill,{yoy:r.ryoy}))
                 ))
               )
             )
@@ -1750,26 +1845,24 @@ window.TABS = (function(){
       });
     }, [gK1Arr, gK2Arr, gK3Arr, gBrandArr, kwByKw]);
 
-    const sorted = [...scopedPrice].sort((a,b)=>b.a25-a.a25);
-    const monthly = aggregateMonthly(scopedPrice.map(p => {
-      const full = kwByKw.get(p.kw);
-      return full || {m25:new Array(12).fill(p.a25)};
-    }), 'm25');
+    const sorted = [...scopedPrice].sort((a,b)=>b.last-a.last);
+    // Aylık seri: Son 12 Ay penceresi (tam keyword kaydından)
+    const monthly = aggregateRolling(scopedPrice.map(p => kwByKw.get(p.kw)).filter(Boolean), 'last');
 
-    const priceTotal = scopedPrice.reduce((s,p)=>s+(p.a25||0),0) * 12;
-    const priceTotal24 = scopedPrice.reduce((s,p)=>s+(p.a24||0),0) * 12;
-    const priceYoy = priceTotal24 ? (priceTotal - priceTotal24) / priceTotal24 : 0;
+    const priceTotal = scopedPrice.reduce((s,p)=>s+(p.last||0),0) * 12;
+    const priceTotalPrev = scopedPrice.reduce((s,p)=>s+(p.prev||0),0) * 12;
+    const priceYoy = priceTotalPrev ? (priceTotal - priceTotalPrev) / priceTotalPrev : 0;
 
     const byK1 = {};
-    for (const p of scopedPrice) byK1[p.k1] = (byK1[p.k1]||0) + (p.a25||0)*12;
+    for (const p of scopedPrice) byK1[p.k1] = (byK1[p.k1]||0) + (p.last||0)*12;
     const byK1Rows = Object.entries(byK1).map(([k,v]) => ({label:k, value:v, color:katColor(k)})).sort((a,b)=>b.value-a.value);
 
     return h('div',null,
       h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
-        h(Kpi,{label:'Fiyat Intent Hacmi', value:fmtNum(priceTotal), chip:fmtPct(priceYoy), chipClass:trendClass(priceYoy), sub: hasGlobal ? 'filtreli · 2025' : '2025 · dönüşüm sinyali', accent:true}),
+        h(Kpi,{label:'Fiyat Intent Hacmi', value:fmtNum(priceTotal), chip:fmtPct(priceYoy), chipClass:trendClass(priceYoy), sub: hasGlobal ? 'filtreli · Son 12 Ay' : 'Son 12 Ay · dönüşüm sinyali', accent:true}),
         h(Kpi,{label:'Fiyat KW', value:fmtNum(scopedPrice.length)}),
-        h(Kpi,{label:'Pazar İçi Pay', value: TOTAL_2025 ? (priceTotal/TOTAL_2025*100).toFixed(1).replace('.',',')+'%' : '—', sub:'toplam aramanın'}),
-        h(Kpi,{label:'Peak Ay', value: monthly.reduce((s,v)=>s+v,0) > 0 ? TR_MONTHS[monthly.indexOf(Math.max(...monthly))] : '-'}),
+        h(Kpi,{label:'Pazar İçi Pay', value: TOTAL_R12 ? (priceTotal/TOTAL_R12*100).toFixed(1).replace('.',',')+'%' : '—', sub:'toplam aramanın'}),
+        h(Kpi,{label:'Peak Ay', value: monthly.reduce((s,v)=>s+v,0) > 0 ? ROLLING_LABELS[monthly.indexOf(Math.max(...monthly))] : '-'}),
       ),
       h('div',{className:'insight-strip'},
         h('span',{className:'arrow'}, I.ArrowRight(14)),
@@ -1783,11 +1876,10 @@ window.TABS = (function(){
             ),
             h(CopyButton, {
               getData: () => ({
-                headers: ['Keyword','Marka','Kat 1','Kat 2','2024 Avg','2025 Avg','YoY %','Peak Ay'],
+                headers: ['Keyword','Marka','Kat 1','Kat 2','Önceki 12 Ay Ort','Son 12 Ay Ort','YoY %','Peak Ay'],
                 rows: sorted.map(r => {
                   const full = kwByKw.get(r.kw) || {};
-                  const mi = serialToMonthIdx(r.peakMonth);
-                  return [r.kw, full.brand||'', r.k1, r.k2, r.a24, r.a25, (r.yoy*100).toFixed(2)+'%', mi!=null ? TR_MONTHS[mi] : ''];
+                  return [r.kw, full.brand||'', r.k1, r.k2, r.prev, r.last, ((r.ryoy||0)*100).toFixed(2)+'%', serialToRollingLabel(r.peakMonth)];
                 })
               })
             })
@@ -1799,7 +1891,7 @@ window.TABS = (function(){
                   h('th',null,'Keyword'),
                   h('th',null,'Marka'),
                   h('th',null,'Kategori'),
-                  h('th',{className:'num'},'2025'),
+                  h('th',{className:'num'},'Son 12 Ay'),
                   h('th',{className:'num'},'YoY'),
                   h('th',null,'Peak')
                 )
@@ -1807,16 +1899,15 @@ window.TABS = (function(){
               h('tbody',null,
                 sorted.length === 0 && h('tr',null, h('td',{colSpan:6, className:'empty'}, 'Filtreye uyan fiyat intent keyword yok')),
                 sorted.map((r,i) => {
-                  const mi = serialToMonthIdx(r.peakMonth);
                   const full = kwByKw.get(r.kw);
                   const brand = full?.brand || '';
                   return h('tr',{key:i, className:'clickable', onClick:()=>full && setKeywordModal(full)},
                     h('td',{className:'kw-cell'}, r.kw),
                     h('td',{style:{fontSize:11, fontWeight: brand ? 500 : 400, color: brand ? 'var(--ink)' : 'var(--ink-3)'}}, brand || '—'),
                     h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k1),
-                    h('td',{className:'num', title: fmtFull(r.a25)}, fmtNum(r.a25)),
-                    h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
-                    h('td',null, mi!=null ? h('span',{className:'pill neu'}, TR_MONTHS[mi]) : '-')
+                    h('td',{className:'num', title: fmtFull(r.last)}, fmtNum(r.last)),
+                    h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
+                    h('td',null, r.peakMonth ? h('span',{className:'pill neu'}, serialToRollingLabel(r.peakMonth)) : '-')
                   );
                 })
               )
@@ -1825,8 +1916,8 @@ window.TABS = (function(){
         ),
         h('div',null,
           h('div',{className:'card',style:{marginBottom:18}},
-            h('div',{className:'card-header'},h('h3',null,'Aylık Dağılım')),
-            h(LineChart,{series:[{name:'Fiyat Intent', values:monthly, color:'#FF7B52', peakIdx:monthly.indexOf(Math.max(...monthly))}], height:200})
+            h('div',{className:'card-header'},h('h3',null,'Aylık Dağılım'), h('div',{className:'hint'}, `Son 12 Ay (${R12_RANGE})`)),
+            h(LineChart,{series:[{name:'Fiyat Intent', shortName:'Fiyat Intent', pointLabels:ROLLING_LABELS, values:monthly, color:'#FF7B52', peakIdx:monthly.indexOf(Math.max(...monthly))}], labels:ROLLING_LABELS, height:200})
           ),
           h('div',{className:'card'},
             h('div',{className:'card-header'}, h('h3',null,'Kategori Bazında')),
@@ -1840,10 +1931,11 @@ window.TABS = (function(){
   // === Out-of-Catalog Tab — Özdilekte Olmayan Markalar ===
   function OutOfCatalogTab({setKeywordModal, onNavigateKw, onNavigateBrand, globalFilter}) {
     const OUT = D.outKeywords || [];
+    const viewMode = globalFilter?.viewMode || 'rolling';
 
     const [q, setQ] = React.useState('');
-    const [sort, setSort] = React.useState({k:'a25', d:-1});
-    const [brandSort, setBrandSort] = React.useState({k:'sum25', d:-1});
+    const [sort, setSort] = React.useState({k:'r12', d:-1});
+    const [brandSort, setBrandSort] = React.useState({k:'sumR12', d:-1});
     const [brandQ, setBrandQ] = React.useState('');
     const [expandedBrands, setExpandedBrands] = React.useState(() => new Set());
     const [page, setPage] = React.useState(0);
@@ -1864,24 +1956,27 @@ window.TABS = (function(){
       applyGlobalFilter(OUT, globalFilter)
     , [globalFilter]);
 
-    // Aggregates (filter-aware)
+    // Aggregates (filter-aware) — karşılaştırma rolling (Son 12 Ay vs Önceki 12 Ay)
     const agg = React.useMemo(() => {
-      const total25 = scopedKws.reduce((s,k) => s + (k.a25 || 0) * 12, 0);
-      const total24 = scopedKws.reduce((s,k) => s + (k.a24 || 0) * 12, 0);
-      const yoy = total24 ? (total25 - total24) / total24 : 0;
+      const totalR12 = scopedKws.reduce((s,k) => s + (k.r12 || 0) * 12, 0);
+      const totalP12 = scopedKws.reduce((s,k) => s + (k.p12 || 0) * 12, 0);
+      const yoy = totalP12 ? (totalR12 - totalP12) / totalP12 : 0;
       const monthly25 = aggregateMonthly(scopedKws, 'm25');
       const monthly24 = aggregateMonthly(scopedKws, 'm24');
-      const peakIdx = monthly25.indexOf(Math.max(...monthly25));
-      const rising = scopedKws.filter(k => k.yoy > 0.05).length;
-      const falling = scopedKws.filter(k => k.yoy < -0.05).length;
+      const monthly26 = aggregateMonthly(scopedKws, 'm26').slice(0, N26);
+      const monthlyR12 = aggregateRolling(scopedKws, 'last');
+      const monthlyP12 = aggregateRolling(scopedKws, 'prev');
+      const peakIdx = monthlyR12.indexOf(Math.max(...monthlyR12));  // rolling index
+      const rising = scopedKws.filter(k => k.ryoy > 0.05).length;
+      const falling = scopedKws.filter(k => k.ryoy < -0.05).length;
       const brands = new Set(scopedKws.map(k => k.brand).filter(Boolean)).size;
-      return { total25, total24, yoy, monthly25, monthly24, peakIdx, rising, falling, brands, count: scopedKws.length };
+      return { totalR12, totalP12, yoy, monthly25, monthly24, monthly26, monthlyR12, monthlyP12, peakIdx, rising, falling, brands, count: scopedKws.length };
     }, [scopedKws]);
 
     // Kategori Dağılımı (Kat 1 — brand-aware)
     const byK1 = React.useMemo(() => {
       const m = {};
-      for (const k of scopedKws) m[k.k1] = (m[k.k1] || 0) + (k.a25 || 0) * 12;
+      for (const k of scopedKws) m[k.k1] = (m[k.k1] || 0) + (k.r12 || 0) * 12;
       return Object.entries(m).map(([k,v]) => ({label:k, value:v, color:katColor(k)})).sort((a,b)=>b.value-a.value);
     }, [scopedKws]);
 
@@ -1890,58 +1985,59 @@ window.TABS = (function(){
       const m = {};
       for (const k of scopedKws) {
         const key = k.k2 || '(boş)';
-        m[key] = (m[key] || 0) + (k.a25 || 0) * 12;
+        m[key] = (m[key] || 0) + (k.r12 || 0) * 12;
       }
       return Object.entries(m).map(([k,v]) => ({label:k, value:v, color:'var(--coral)'})).sort((a,b)=>b.value-a.value).slice(0, 10);
     }, [scopedKws]);
 
-    // All brands (from scoped keywords)
+    // All brands (from scoped keywords) — rolling toplamlar (Son/Önceki 12 Ay)
     const allBrands = React.useMemo(() => {
       const m = {};
       for (const k of scopedKws) {
         if (!k.brand) continue;
         const key = k.brand;
         if (!m[key]) m[key] = {
-          brand: key, count: 0, sum24: 0, sum25: 0,
-          m24: new Array(12).fill(0), m25: new Array(12).fill(0),
+          brand: key, count: 0, sumP12: 0, sumR12: 0,
+          rollM: new Array(12).fill(0), prevM: new Array(12).fill(0),
           k1vol: {}, k2vol: {}, kws: []
         };
         const b = m[key];
+        const roll = rollingOf(k);
+        const prevRoll = prevRollingOf(k) || new Array(12).fill(0);
         b.count += 1;
-        b.sum24 += (k.a24 || 0) * 12;
-        b.sum25 += (k.a25 || 0) * 12;
+        b.sumP12 += (k.p12 || 0) * 12;
+        b.sumR12 += (k.r12 || 0) * 12;
         for (let i = 0; i < 12; i++) {
-          b.m24[i] += k.m24[i] || 0;
-          b.m25[i] += k.m25[i] || 0;
+          b.rollM[i] += roll[i] || 0;
+          b.prevM[i] += prevRoll[i] || 0;
         }
-        b.k1vol[k.k1] = (b.k1vol[k.k1] || 0) + (k.a25 || 0) * 12;
+        b.k1vol[k.k1] = (b.k1vol[k.k1] || 0) + (k.r12 || 0) * 12;
         const k2key = k.k2 || '(boş)';
-        if (!b.k2vol[k2key]) b.k2vol[k2key] = { vol: 0, count: 0, sum24: 0, sum25: 0, m25: new Array(12).fill(0), yoyNum: 0, yoyDen: 0, kws: [] };
-        b.k2vol[k2key].vol += (k.a25 || 0) * 12;
+        if (!b.k2vol[k2key]) b.k2vol[k2key] = { count: 0, sumP12: 0, sumR12: 0, rollM: new Array(12).fill(0), kws: [] };
         b.k2vol[k2key].count += 1;
-        b.k2vol[k2key].sum24 += (k.a24 || 0) * 12;
-        b.k2vol[k2key].sum25 += (k.a25 || 0) * 12;
-        for (let i = 0; i < 12; i++) b.k2vol[k2key].m25[i] += k.m25[i] || 0;
+        b.k2vol[k2key].sumP12 += (k.p12 || 0) * 12;
+        b.k2vol[k2key].sumR12 += (k.r12 || 0) * 12;
+        for (let i = 0; i < 12; i++) b.k2vol[k2key].rollM[i] += roll[i] || 0;
         b.k2vol[k2key].kws.push(k);
         b.kws.push(k);
       }
       return Object.values(m).map(b => {
-        const yoy = b.sum24 ? (b.sum25 - b.sum24) / b.sum24 : 0;
-        const peakI = b.m25.indexOf(Math.max(...b.m25));
+        const ryoy = b.sumP12 ? (b.sumR12 - b.sumP12) / b.sumP12 : 0;
+        const peakI = b.rollM.indexOf(Math.max(...b.rollM));
         const topK1Entries = Object.entries(b.k1vol).sort((a,b) => b[1] - a[1]);
         const topK1 = topK1Entries[0]?.[0] || '';
-        const topK1Share = b.sum25 && topK1Entries[0] ? topK1Entries[0][1] / b.sum25 : 0;
+        const topK1Share = b.sumR12 && topK1Entries[0] ? topK1Entries[0][1] / b.sumR12 : 0;
         // Build k2 rows sorted
         const k2Rows = Object.entries(b.k2vol).map(([k2, v]) => ({
           k2,
           count: v.count,
-          sum24: v.sum24,
-          sum25: v.sum25,
-          yoy: v.sum24 ? (v.sum25 - v.sum24) / v.sum24 : 0,
-          m25: v.m25,
-          topKws: [...v.kws].sort((a,b) => (b.a25||0) - (a.a25||0)).slice(0, 3)
-        })).sort((a,b) => b.sum25 - a.sum25);
-        return { ...b, yoy, peakI, topK1, topK1Share, k2Rows };
+          sumP12: v.sumP12,
+          sumR12: v.sumR12,
+          ryoy: v.sumP12 ? (v.sumR12 - v.sumP12) / v.sumP12 : 0,
+          rollM: v.rollM,
+          topKws: [...v.kws].sort((a,b) => (b.r12||0) - (a.r12||0)).slice(0, 3)
+        })).sort((a,b) => b.sumR12 - a.sumR12);
+        return { ...b, ryoy, peakI, topK1, topK1Share, k2Rows };
       });
     }, [scopedKws]);
 
@@ -2005,15 +2101,15 @@ window.TABS = (function(){
         ),
         title:'Özdilekte Olmayan Markalar',
         desc: hasFilterActive
-          ? `Filtre aktif · ${fmtNum(scopedKws.length)} keyword · ${fmtNum(agg.brands)} marka · ${fmtNum(agg.total25)} 2025 hacim`
+          ? `Filtre aktif · ${fmtNum(scopedKws.length)} keyword · ${fmtNum(agg.brands)} marka · ${fmtNum(agg.totalR12)} Son 12 Ay hacim`
           : `Özdilek portföyünde bulunmayan markalara ait ${fmtNum(OUT.length)} keyword. Pazar payı fırsatı ve marka genişleme potansiyeli analizi.`
       }),
 
       // KPI strip (filter-aware)
       h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
         h(Kpi,{
-          label: singleBrand ? 'Seçili Marka Hacmi' : (hasFilterActive ? 'Filtreli 2025 Hacim' : 'Toplam 2025 Hacim'),
-          value: fmtNum(agg.total25),
+          label: singleBrand ? 'Seçili Marka Hacmi' : (hasFilterActive ? 'Filtreli Son 12 Ay Hacim' : 'Toplam Son 12 Ay Hacim'),
+          value: fmtNum(agg.totalR12),
           chip: fmtPct(agg.yoy), chipClass: trendClass(agg.yoy),
           sub: `${fmtNum(agg.count)} KW`, accent: true
         }),
@@ -2022,8 +2118,8 @@ window.TABS = (function(){
         h(Kpi,{label:'Düşen', value:fmtNum(agg.falling), chip:'↓', chipClass:'neg', sub:'YoY < -5%'}),
         h(Kpi,{
           label:'Peak Ay',
-          value: agg.peakIdx >= 0 ? TR_MONTHS_LONG[agg.peakIdx] : '-',
-          sub: agg.peakIdx >= 0 ? fmtNum(agg.monthly25[agg.peakIdx]) + ' arama' : ''
+          value: agg.peakIdx >= 0 ? rollingLongLabel(agg.peakIdx) : '-',
+          sub: agg.peakIdx >= 0 ? fmtNum(agg.monthlyR12[agg.peakIdx]) + ' arama' : ''
         }),
       ),
 
@@ -2033,15 +2129,18 @@ window.TABS = (function(){
           h('div',{className:'card-header'}, h('h3',null,
             singleBrand ? `12 Aylık Trend · ${singleBrand}` : '12 Aylık Hacim Trendi',
             h(InfoIcon,null, singleBrand
-              ? `${singleBrand} markasının aylık toplam arama hacmi. Gri: 2024, coral: 2025.`
-              : 'Özdilekte olmayan markaların aylık arama hacmi. Gri: 2024, coral: 2025. Filtreye göre dinamik güncellenir.'
+              ? `${singleBrand} markasının aylık toplam arama hacmi. Rolling görünümde gri: Önceki 12 Ay, coral: Son 12 Ay; takvim görünümünde yıl çizgileri.`
+              : 'Özdilekte olmayan markaların aylık arama hacmi. Rolling görünümde gri: Önceki 12 Ay, coral: Son 12 Ay; takvim görünümünde yıl çizgileri. Filtreye göre dinamik güncellenir.'
             )
           )),
-          agg.total25 > 0
-            ? h(LineChart,{series:[
-                {name:'2024', values:agg.monthly24, color:'#8A8A8A'},
-                {name:'2025', values:agg.monthly25, color:'#FF7B52', peakIdx:agg.peakIdx}
-              ], legend:true, height:260})
+          agg.totalR12 > 0
+            ? (() => {
+                const { series, labels } = lineSeriesFor(viewMode, {
+                  m24: agg.monthly24, m25: agg.monthly25, m26: agg.monthly26,
+                  roll: agg.monthlyR12, prev: agg.monthlyP12, peakIdx: agg.peakIdx
+                });
+                return h(LineChart,{ series, labels, legend:true, height:260});
+              })()
             : h('div',{className:'empty', style:{padding:30}}, 'Veri yok')
         ),
         // Kategori Pazar Payı — drill-down (Kat1→Kat2→Kat3), global filter ile entegre
@@ -2059,7 +2158,7 @@ window.TABS = (function(){
           for (const k of scopedKws) {
             const key = level === 'k1' ? k.k1 : level === 'k2' ? k.k2 : k.k3;
             if (!key) continue;
-            m[key] = (m[key] || 0) + (k.a25 || 0);  // monthly avg per keyword sum = level's monthly avg
+            m[key] = (m[key] || 0) + (k.r12 || 0);  // monthly avg per keyword sum = level's monthly avg
           }
           const totalAvg = Object.values(m).reduce((s,v)=>s+v,0);
           const rows = Object.entries(m)
@@ -2103,12 +2202,18 @@ window.TABS = (function(){
 
       // === Yıldız Markalar + Eriyen Markalar (side-by-side stripe) ===
       (() => {
-        const withVol = allBrands.filter(b => b.sum25 >= 50_000);  // anlamlılık için min ~50k/yıl
-        const rising = [...withVol].filter(b => b.yoy >= 0.25).sort((a,b) => b.yoy - a.yoy).slice(0, 6);
-        const falling = [...withVol].filter(b => b.yoy <= -0.25).sort((a,b) => a.yoy - b.yoy).slice(0, 6);
+        const withVol = allBrands.filter(b => b.sumR12 >= 50_000);  // anlamlılık için min ~50k/yıl
+        const rising = [...withVol].filter(b => b.ryoy >= 0.25).sort((a,b) => b.ryoy - a.ryoy).slice(0, 6);
+        const falling = [...withVol].filter(b => b.ryoy <= -0.25).sort((a,b) => a.ryoy - b.ryoy).slice(0, 6);
         if (rising.length === 0 && falling.length === 0) return null;
+        // Vurgu: kenar şeridi yerine soluk çerçeve + hafif zemin tonu
         const renderList = (items, accent, emptyMsg, label, desc) => h('div',{
-          className:'card', style:{minWidth:0, borderLeft:`3px solid ${accent}`}
+          className:'card',
+          style:{
+            minWidth:0,
+            border:`1px solid color-mix(in srgb, ${accent} 30%, var(--line))`,
+            background:`color-mix(in srgb, ${accent} 4%, var(--bg-card))`
+          }
         },
           h('div',{className:'card-header'}, h('h3',null, label,
             h(InfoIcon,null,desc)
@@ -2129,12 +2234,12 @@ window.TABS = (function(){
                     h('span',{style:{fontSize:11, color:'var(--ink-3)', fontWeight:500, minWidth:14}}, (i+1)+'.'),
                     h('strong',{style:{flex:1, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, b.brand),
                     h('span',{
-                      className:'pill ' + (b.yoy > 0 ? 'pos' : 'neg'),
+                      className:'pill ' + (b.ryoy > 0 ? 'pos' : 'neg'),
                       style:{fontSize:11, fontWeight:700, padding:'2px 7px'}
-                    }, (b.yoy > 0 ? '↑ +' : '↓ ') + fmtPct(b.yoy, 0).replace(/[+-]/,''))
+                    }, (b.ryoy > 0 ? '↑ +' : '↓ ') + fmtPct(b.ryoy, 0).replace(/[+-]/,''))
                   ),
                   h('div',{style:{display:'flex',alignItems:'center',gap:10,fontSize:11,color:'var(--ink-3)', flexWrap:'wrap'}},
-                    h('span',{title: fmtFull(toMonthlyAvg(b.sum25)) + ' /ay'}, fmtNum(toMonthlyAvg(b.sum25)), ' /ay 2025'),
+                    h('span',{title: fmtFull(toMonthlyAvg(b.sumR12)) + ' /ay'}, fmtNum(toMonthlyAvg(b.sumR12)), ' /ay Son 12 Ay'),
                     h('span',{style:{width:3,height:3,borderRadius:'50%',background:'var(--ink-3)',opacity:.5}}),
                     h('span',null, b.count, ' KW'),
                     h('span',{style:{width:3,height:3,borderRadius:'50%',background:'var(--ink-3)',opacity:.5}}),
@@ -2143,12 +2248,12 @@ window.TABS = (function(){
                       b.topK1
                     )
                   ),
-                  h(Sparkline, {values: b.m25, w: 260, h: 22})
+                  h(Sparkline, {values: b.rollM, w: 260, h: 22})
                 ))
               )
         );
         return h('div',{className:'grid grid-2', style:{marginBottom:18, gap:14}},
-          renderList(rising, 'var(--green)', 'Yükselen marka yok', '⭐ Yıldız Markalar', 'YoY ≥ +%25 büyüyen & yıllık hacmi ≥ 50K olan markalar. Portföy dışı olan bu markalar en yüksek büyüme ivmesiyle pazar fırsatı sinyali veriyor.'),
+          renderList(rising, 'var(--green)', 'Yükselen marka yok', '⭐ Yıldız Markalar', `Son 12 ayda önceki 12 aya göre YoY ≥ +%25 büyüyen & yıllık hacmi ≥ 50K olan markalar. Portföy dışı olan bu markalar en yüksek büyüme ivmesiyle pazar fırsatı sinyali veriyor.`),
           renderList(falling, 'var(--red)', 'Düşen marka yok', '📉 Eriyen Markalar', 'YoY ≤ -%25 küçülen markalar. Pazardaki ilginin azaldığı markalar — portföye alınması halinde risk oluşturabilir.')
         );
       })(),
@@ -2159,7 +2264,7 @@ window.TABS = (function(){
           h('h3',{style:{flex:1,minWidth:200}},
             'Tüm Markalar · Detaylı Analiz',
             h(InfoIcon,null,
-              h('strong',null,'Ne gösterir? '),'Özdilek portföyünde bulunmayan markaların keyword sayısı, 2024/2025 hacim, YoY, peak ay ve ana kategori bilgisi.',
+              h('strong',null,'Ne gösterir? '),`Özdilek portföyünde bulunmayan markaların keyword sayısı, Önceki/Son 12 Ay hacmi (${P12_RANGE} / ${R12_RANGE}), YoY, peak ay ve ana kategori bilgisi.`,
               h('br'),h('br'),h('strong',null,'Nasıl kullanılır? '),'Satıra tıkla → alt kategori (Kat 2) kırılımı pivot gibi açılır. Başlıklara tıklayarak sırala. Üstten Marka filtresi ile birden fazla marka seçilebilir.'
             ),
             h('span',{className:'txt-3', style:{fontSize:11, marginLeft:8}}, fmtNum(brandRows.length)+' marka')
@@ -2171,14 +2276,14 @@ window.TABS = (function(){
           }),
           h(CopyButton, {
             getData: () => {
-              const hdr = ['#', 'Marka', 'KW', '2024 Avg', '2025 Avg', 'YoY %', 'Peak Ay', 'Ana Kategori', 'Kat Payı %'];
+              const hdr = ['#', 'Marka', 'KW', 'Önceki 12 Ay Avg', 'Son 12 Ay Avg', 'YoY %', 'Peak Ay', 'Ana Kategori', 'Kat Payı %'];
               const rows = [];
               brandRows.forEach((b, i) => {
                 rows.push([
                   i+1, b.brand, b.count,
-                  toMonthlyAvg(b.sum24), toMonthlyAvg(b.sum25),
-                  (b.yoy*100).toFixed(2)+'%',
-                  b.peakI >= 0 ? TR_MONTHS[b.peakI] : '',
+                  toMonthlyAvg(b.sumP12), toMonthlyAvg(b.sumR12),
+                  (b.ryoy*100).toFixed(2)+'%',
+                  b.peakI >= 0 ? ROLLING_LABELS[b.peakI] : '',
                   b.topK1,
                   (b.topK1Share*100).toFixed(1)+'%'
                 ]);
@@ -2187,8 +2292,8 @@ window.TABS = (function(){
                   b.k2Rows.forEach(r => {
                     rows.push({indent:1, cells:[
                       '', '↳ ' + r.k2, r.count,
-                      toMonthlyAvg(r.sum24), toMonthlyAvg(r.sum25),
-                      (r.yoy*100).toFixed(2)+'%',
+                      toMonthlyAvg(r.sumP12), toMonthlyAvg(r.sumR12),
+                      (r.ryoy*100).toFixed(2)+'%',
                       '', '', ''
                     ]});
                   });
@@ -2203,10 +2308,10 @@ window.TABS = (function(){
               const csv = toCSV(brandRows, [
                 {label:'Marka',key:'brand'},
                 {label:'KW Sayısı',key:'count'},
-                {label:'2024 Avg', get:r=>toMonthlyAvg(r.sum24)},
-                {label:'2025 Avg', get:r=>toMonthlyAvg(r.sum25)},
-                {label:'YoY',key:'yoy'},
-                {label:'Peak Ay', get:r => r.peakI >= 0 ? TR_MONTHS[r.peakI] : ''},
+                {label:'Önceki 12 Ay Avg', get:r=>toMonthlyAvg(r.sumP12)},
+                {label:'Son 12 Ay Avg', get:r=>toMonthlyAvg(r.sumR12)},
+                {label:'YoY',key:'ryoy'},
+                {label:'Peak Ay', get:r => r.peakI >= 0 ? ROLLING_LABELS[r.peakI] : ''},
                 {label:'Ana Kategori',key:'topK1'},
                 {label:'Kat Payı %', get:r => (r.topK1Share*100).toFixed(1)},
               ]);
@@ -2221,9 +2326,9 @@ window.TABS = (function(){
               h('th',null,'#'),
               bth('Marka','brand'),
               bth('KW','count',true),
-              bth('2024 Avg','sum24',true),
-              bth('2025 Avg','sum25',true),
-              bth('YoY','yoy',true),
+              bth('Önceki 12 Ay','sumP12',true),
+              bth('Son 12 Ay','sumR12',true),
+              bth('YoY','ryoy',true),
               h('th',null,'12 Ay'),
               bth('Peak Ay','peakI'),
               bth('Ana Kategori','topK1'),
@@ -2238,19 +2343,19 @@ window.TABS = (function(){
                   h('td',{style:{width:40, color:'var(--ink-3)', fontSize:11}}, i + 1),
                   h('td',null, h('strong',null, b.brand)),
                   h('td',{className:'num'}, fmtNum(b.count)),
-                  h('td',{className:'num', title:fmtFull(toMonthlyAvg(b.sum24))}, fmtNum(toMonthlyAvg(b.sum24))),
-                  h('td',{className:'num', title:fmtFull(toMonthlyAvg(b.sum25))}, fmtNum(toMonthlyAvg(b.sum25))),
-                  h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
+                  h('td',{className:'num', title:fmtFull(toMonthlyAvg(b.sumP12))}, fmtNum(toMonthlyAvg(b.sumP12))),
+                  h('td',{className:'num', title:fmtFull(toMonthlyAvg(b.sumR12))}, fmtNum(toMonthlyAvg(b.sumR12))),
+                  h('td',{className:'num'}, h(YoYPill,{yoy:b.ryoy})),
                   h('td',{style:{width:130}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:6}},
-                      h(Sparkline,{values:b.m25, w:90, h:26}),
-                      (() => { const arr = recentTrendArrow(b.m25); return arr ? h('span',{
+                      h(Sparkline,{values:b.rollM, w:90, h:26}),
+                      (() => { const arr = recentTrendArrow(b.rollM); return arr ? h('span',{
                         title: arr.title,
                         style:{fontSize:14, fontWeight:700, color: arr.color, lineHeight:1}
                       }, arr.char) : null; })()
                     )
                   ),
-                  h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, TR_MONTHS[b.peakI]) : '-'),
+                  h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, ROLLING_LABELS[b.peakI]) : '-'),
                   h('td',{style:{fontSize:11}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
                       h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(b.topK1),flexShrink:0}}),
@@ -2284,8 +2389,8 @@ window.TABS = (function(){
                         h('thead',null, h('tr',null,
                           h('th',null,'Kat 2'),
                           h('th',{className:'num'},'KW'),
-                          h('th',{className:'num'},'2024 Avg'),
-                          h('th',{className:'num'},'2025 Avg'),
+                          h('th',{className:'num'},'Önceki 12 Ay'),
+                          h('th',{className:'num'},'Son 12 Ay'),
                           h('th',{className:'num'},'YoY'),
                           h('th',null,'12 Ay'),
                           h('th',null,'Top Keyword\'ler')
@@ -2294,10 +2399,10 @@ window.TABS = (function(){
                           b.k2Rows.map((r, ri) => h('tr',{key:ri},
                             h('td',null, h('strong',null, r.k2)),
                             h('td',{className:'num'}, fmtNum(r.count)),
-                            h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sum24))}, fmtNum(toMonthlyAvg(r.sum24))),
-                            h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sum25))}, fmtNum(toMonthlyAvg(r.sum25))),
-                            h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
-                            h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
+                            h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sumP12))}, fmtNum(toMonthlyAvg(r.sumP12))),
+                            h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sumR12))}, fmtNum(toMonthlyAvg(r.sumR12))),
+                            h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
+                            h('td',{style:{width:110}}, h(Sparkline,{values:r.rollM, w:100, h:26})),
                             h('td',{style:{fontSize:11, color:'var(--ink-2)'}},
                               r.topKws.map((k, ki) => h('span',{
                                 key:ki, className:'clickable',
@@ -2308,7 +2413,7 @@ window.TABS = (function(){
                                   border:'1px solid var(--line)', borderRadius:12,
                                   fontSize:11, cursor:'pointer'
                                 }
-                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:10}}, fmtNum(k.a25))))
+                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:10}}, fmtNum(k.r12))))
                             )
                           ))
                         )
@@ -2333,19 +2438,23 @@ window.TABS = (function(){
         h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
         h(CopyButton, {
           getData: () => ({
-            headers: ['Keyword','Marka','Kat 1','Kat 2','Kat 3','2024 Avg','2025 Avg','YoY %','Peak Ay'],
-            rows: filtered.map(r => [
-              r.kw, r.brand||'', r.k1, r.k2, r.k3,
-              r.a24, r.a25, (r.yoy*100).toFixed(2)+'%',
-              r.m25 ? TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))] : ''
-            ])
+            headers: ['Keyword','Marka','Kat 1','Kat 2','Kat 3','Önceki 12 Ay Ort','Son 12 Ay Ort','YoY %','Peak Ay'],
+            rows: filtered.map(r => {
+              const roll = rollingOf(r);
+              return [
+                r.kw, r.brand||'', r.k1, r.k2, r.k3,
+                r.p12, r.r12, ((r.ryoy||0)*100).toFixed(2)+'%',
+                ROLLING_LABELS[roll.indexOf(Math.max(...roll))] || ''
+              ];
+            })
           })
         }),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
             {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
-            {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'},
-            ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
+            {label:'Önceki 12 Ay Ort',key:'p12'}, {label:'Son 12 Ay Ort',key:'r12'}, {label:'YoY',key:'ryoy'},
+            {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'},
+            ...ROLLING_LABELS.map((m,i)=>({label:m, get:r=>rollingOf(r)[i]}))
           ]);
           downloadCSV(`${BRAND_SLUG}-out-of-catalog.csv`, csv);
         }}, '↓ CSV'),
@@ -2359,16 +2468,17 @@ window.TABS = (function(){
               th('Marka','brand'),
               th('Kat 1','k1'),
               th('Kat 2','k2'),
-              th('2024','a24',true),
-              th('2025','a25',true),
-              th('YoY','yoy',true),
+              th('Önceki 12 Ay','p12',true),
+              th('Son 12 Ay','r12',true),
+              th('YoY','ryoy',true),
               h('th',null,'12 Ay'),
               h('th',null,'Peak')
             )),
             h('tbody',null,
               pageRows.length === 0 && h('tr',null, h('td',{colSpan:9, className:'empty'}, 'Sonuç bulunamadı')),
               pageRows.map((r,i) => {
-                const pi = r.m25 ? r.m25.indexOf(Math.max(...r.m25)) : -1;
+                const roll = rollingOf(r);
+                const pi = roll.length ? roll.indexOf(Math.max(...roll)) : -1;
                 return h('tr',{key:page*perPage+i, className:'clickable', onClick:()=>setKeywordModal(r)},
                   h('td',{className:'kw-cell', style:{maxWidth:200}}, r.kw),
                   h('td',{style:{fontSize:11, fontWeight:500}}, r.brand || '-'),
@@ -2379,11 +2489,11 @@ window.TABS = (function(){
                     )
                   ),
                   h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
-                  h('td',{className:'num'}, fmtNum(r.a24)),
-                  h('td',{className:'num'}, fmtNum(r.a25)),
-                  h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
-                  h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
-                  h('td',null, pi>=0 ? h('span',{className:'pill neu'}, TR_MONTHS[pi]) : '-')
+                  h('td',{className:'num'}, fmtNum(r.p12)),
+                  h('td',{className:'num'}, fmtNum(r.r12)),
+                  h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
+                  h('td',{style:{width:110}}, h(Sparkline,{values:roll, w:100, h:26})),
+                  h('td',null, pi>=0 ? h('span',{className:'pill neu'}, ROLLING_LABELS[pi]) : '-')
                 );
               })
             )
@@ -2403,7 +2513,8 @@ window.TABS = (function(){
     const [q, setQ] = React.useState('');
     // catFilter mirrors globalFilter.globalCatalog — reads from global (single source of truth)
     const catFilter = globalFilter?.globalCatalog || '';
-    const [sort, setSort] = React.useState({k:'sum25', d:-1});
+    const viewMode = globalFilter?.viewMode || 'rolling';
+    const [sort, setSort] = React.useState({k:'sumR12', d:-1});
     const [expandedBrands, setExpandedBrands] = React.useState(() => new Set());
     const [page, setPage] = React.useState(0);
     const perPage = 50;
@@ -2411,7 +2522,7 @@ window.TABS = (function(){
     // Brand-tab keyword list (alttaki tablo)
     const [brandKwQuery, setBrandKwQuery] = React.useState('');
     const [brandKwPage, setBrandKwPage] = React.useState(0);
-    const [brandKwSort, setBrandKwSort] = React.useState({k:'a25', d:-1});
+    const [brandKwSort, setBrandKwSort] = React.useState({k:'r12', d:-1});
     React.useEffect(() => setBrandKwPage(0), [brandKwQuery, brandKwSort, catFilter, globalFilter]);
 
     // Refs for smooth-scroll on matrix / chart click
@@ -2440,32 +2551,38 @@ window.TABS = (function(){
       return applyGlobalFilter(pool.filter(k => !!k.brand), globalFilter);
     }, [globalFilter]);
 
-    // Build brands from scoped keywords (filter-aware)
+    // Build brands from scoped keywords (filter-aware) — rolling toplamlar
     const allBrands = React.useMemo(() => {
       const m = {};
       for (const k of scopedKws) {
         const key = k.brand;
         if (!m[key]) m[key] = {
           brand: key, catalog: k.catalog || '', count: 0,
-          sum24: 0, sum25: 0,
-          m24: new Array(12).fill(0), m25: new Array(12).fill(0),
+          sumP12: 0, sumR12: 0,
+          rollM: new Array(12).fill(0), prevM: new Array(12).fill(0),
+          m24: new Array(12).fill(0), m25: new Array(12).fill(0), m26: new Array(N26).fill(0),
           k1vol: {}, k2vol: {}
         };
         const b = m[key];
+        const roll = rollingOf(k);
+        const prevRoll = prevRollingOf(k) || new Array(12).fill(0);
         b.count += 1;
-        b.sum24 += (k.a24 || 0) * 12;
-        b.sum25 += (k.a25 || 0) * 12;
+        b.sumP12 += (k.p12 || 0) * 12;
+        b.sumR12 += (k.r12 || 0) * 12;
         for (let i = 0; i < 12; i++) {
+          b.rollM[i] += roll[i] || 0;
+          b.prevM[i] += prevRoll[i] || 0;
           b.m24[i] += k.m24[i] || 0;
           b.m25[i] += k.m25[i] || 0;
         }
-        b.k1vol[k.k1] = (b.k1vol[k.k1] || 0) + (k.a25 || 0) * 12;
+        for (let i = 0; i < N26; i++) b.m26[i] += (k.m26 && k.m26[i]) || 0;
+        b.k1vol[k.k1] = (b.k1vol[k.k1] || 0) + (k.r12 || 0) * 12;
         const k2key = k.k2 || '(boş)';
-        if (!b.k2vol[k2key]) b.k2vol[k2key] = { k2: k2key, count: 0, sum24: 0, sum25: 0, m25: new Array(12).fill(0), kws: [] };
+        if (!b.k2vol[k2key]) b.k2vol[k2key] = { k2: k2key, count: 0, sumP12: 0, sumR12: 0, rollM: new Array(12).fill(0), kws: [] };
         b.k2vol[k2key].count += 1;
-        b.k2vol[k2key].sum24 += (k.a24 || 0) * 12;
-        b.k2vol[k2key].sum25 += (k.a25 || 0) * 12;
-        for (let i = 0; i < 12; i++) b.k2vol[k2key].m25[i] += k.m25[i] || 0;
+        b.k2vol[k2key].sumP12 += (k.p12 || 0) * 12;
+        b.k2vol[k2key].sumR12 += (k.r12 || 0) * 12;
+        for (let i = 0; i < 12; i++) b.k2vol[k2key].rollM[i] += roll[i] || 0;
         b.k2vol[k2key].kws.push(k);
         // Set catalog flag: prefer definite Var/Yok over empty
         if (!b.catalog && k.catalog) b.catalog = k.catalog;
@@ -2473,17 +2590,17 @@ window.TABS = (function(){
         else if (!b.catalog && k.catalog === 'Var') b.catalog = 'Var';
       }
       return Object.values(m).map(b => {
-        const yoy = b.sum24 ? (b.sum25 - b.sum24) / b.sum24 : 0;
-        const peakI = b.m25.indexOf(Math.max(...b.m25));
+        const ryoy = b.sumP12 ? (b.sumR12 - b.sumP12) / b.sumP12 : 0;
+        const peakI = b.rollM.indexOf(Math.max(...b.rollM));
         const topK1Entries = Object.entries(b.k1vol).sort((a,b) => b[1] - a[1]);
         const topK1 = topK1Entries[0]?.[0] || '';
-        const topK1Share = b.sum25 && topK1Entries[0] ? topK1Entries[0][1] / b.sum25 : 0;
+        const topK1Share = b.sumR12 && topK1Entries[0] ? topK1Entries[0][1] / b.sumR12 : 0;
         const k2Rows = Object.values(b.k2vol).map(v => ({
           ...v,
-          yoy: v.sum24 ? (v.sum25 - v.sum24) / v.sum24 : 0,
-          topKws: [...v.kws].sort((a,b) => (b.a25||0) - (a.a25||0)).slice(0, 3)
-        })).sort((a,b) => b.sum25 - a.sum25);
-        return { ...b, yoy, peakI, topK1, topK1Share, k2Rows };
+          ryoy: v.sumP12 ? (v.sumR12 - v.sumP12) / v.sumP12 : 0,
+          topKws: [...v.kws].sort((a,b) => (b.r12||0) - (a.r12||0)).slice(0, 3)
+        })).sort((a,b) => b.sumR12 - a.sumR12);
+        return { ...b, ryoy, peakI, topK1, topK1Share, k2Rows };
       });
     }, [scopedKws]);
 
@@ -2509,16 +2626,16 @@ window.TABS = (function(){
     // KPIs (filter-aware)
     const varCount = allBrands.filter(b => b.catalog === 'Var').length;
     const yokCount = allBrands.filter(b => b.catalog === 'Yok').length;
-    const totalVol25 = allBrands.reduce((s,b) => s + b.sum25, 0);
-    const topBrand = allBrands.length ? [...allBrands].sort((a,b)=>b.sum25-a.sum25)[0] : null;
-    const avgYoY = allBrands.length ? allBrands.reduce((s,b)=>s+(b.yoy||0),0) / allBrands.length : 0;
+    const totalVolR12 = allBrands.reduce((s,b) => s + b.sumR12, 0);
+    const topBrand = allBrands.length ? [...allBrands].sort((a,b)=>b.sumR12-a.sumR12)[0] : null;
+    const avgYoY = allBrands.length ? allBrands.reduce((s,b)=>s+(b.ryoy||0),0) / allBrands.length : 0;
 
     // Top 10 for bar chart
     const top10 = React.useMemo(() => {
       const src = catFilter ? allBrands.filter(b => b.catalog === catFilter) : allBrands;
-      return [...src].sort((a,b)=>b.sum25-a.sum25).slice(0, 10);
+      return [...src].sort((a,b)=>b.sumR12-a.sumR12).slice(0, 10);
     }, [allBrands, catFilter]);
-    const top10Max = top10.length ? Math.max(...top10.map(b => b.sum25)) : 1;
+    const top10Max = top10.length ? Math.max(...top10.map(b => b.sumR12)) : 1;
 
     const th = (label, k, numCol=false) => h('th', {
       className:numCol?'num':'',
@@ -2537,16 +2654,16 @@ window.TABS = (function(){
         ),
         title:'Brand Intelligence',
         desc: hasFilterActive
-          ? `Filtre aktif · ${fmtNum(allBrands.length)} marka · ${fmtNum(totalVol25)} 2025 hacim · ${fmtNum(scopedKws.length)} keyword`
+          ? `Filtre aktif · ${fmtNum(allBrands.length)} marka · ${fmtNum(totalVolR12)} Son 12 Ay hacim · ${fmtNum(scopedKws.length)} keyword`
           : `${fmtNum(allBrands.length)} marka · ${fmtNum(varCount)} Özdilek portföyünde · ${fmtNum(yokCount)} portföy dışı. Hacim ve büyüme bazında marka karşılaştırması.`
       }),
 
       h('div',{className:'grid grid-kpi kpi-5', style:{marginBottom:18}},
         h(Kpi,{label:'Toplam Marka', value:fmtNum(allBrands.length), sub:`${varCount} Var · ${yokCount} Yok`, accent:true}),
-        h(Kpi,{label:'Toplam 2025 Hacim', value:fmtNum(totalVol25), chip:fmtPct(avgYoY), chipClass:trendClass(avgYoY), sub:'markaların toplamı'}),
+        h(Kpi,{label:'Toplam Son 12 Ay Hacim', value:fmtNum(totalVolR12), chip:fmtPct(avgYoY), chipClass:trendClass(avgYoY), sub:'markaların toplamı'}),
         h(Kpi,{label:'Özdilek Portföyü', value:fmtNum(varCount), sub:allBrands.length ? (varCount/allBrands.length*100).toFixed(0)+'% kapsama' : '—'}),
         h(Kpi,{label:'Portföy Dışı', value:fmtNum(yokCount), sub:allBrands.length ? (yokCount/allBrands.length*100).toFixed(0)+'% fırsat' : '—'}),
-        topBrand && h(Kpi,{label:'En Büyük Marka', value:topBrand.brand, sub:fmtNum(topBrand.sum25)+' / 2025'}),
+        topBrand && h(Kpi,{label:'En Büyük Marka', value:topBrand.brand, sub:fmtNum(topBrand.sumR12)+' / Son 12 Ay'}),
       ),
 
       // Filter bar — catFilter artık global'de (Kategori & Marka Filtresi > Özdilekte Var/Yok)
@@ -2558,10 +2675,10 @@ window.TABS = (function(){
           const csv = toCSV(filtered, [
             {label:'Marka',key:'brand'}, {label:'Katalog',key:'catalog'},
             {label:'KW Sayısı',key:'count'},
-            {label:'2024 Avg', get:r=>toMonthlyAvg(r.sum24)}, {label:'2025 Avg', get:r=>toMonthlyAvg(r.sum25)}, {label:'YoY',key:'yoy'},
-            {label:'Peak Ay', get:r => r.peakI >= 0 ? TR_MONTHS[r.peakI] : ''},
+            {label:'Önceki 12 Ay Avg', get:r=>toMonthlyAvg(r.sumP12)}, {label:'Son 12 Ay Avg', get:r=>toMonthlyAvg(r.sumR12)}, {label:'YoY',key:'ryoy'},
+            {label:'Peak Ay', get:r => r.peakI >= 0 ? ROLLING_LABELS[r.peakI] : ''},
             {label:'Ana Kategori',key:'topK1'},
-            ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25 ? r.m25[i] : ''}))
+            ...ROLLING_LABELS.map((m,i)=>({label:m, get:r=>r.rollM ? r.rollM[i] : ''}))
           ]);
           downloadCSV(`${BRAND_SLUG}-brands.csv`, csv);
         }}, '↓ CSV'),
@@ -2582,7 +2699,7 @@ window.TABS = (function(){
         for (const k of pool) {
           const key = level === 'k1' ? k.k1 : level === 'k2' ? k.k2 : k.k3;
           if (!key) continue;
-          m[key] = (m[key] || 0) + (k.a25 || 0);
+          m[key] = (m[key] || 0) + (k.r12 || 0);
         }
         const totalAvg = Object.values(m).reduce((s,v)=>s+v,0);
         const rows = Object.entries(m)
@@ -2646,13 +2763,17 @@ window.TABS = (function(){
           onClick:()=>setBrandKwSort({k, d: brandKwSort.k===k ? -brandKwSort.d : -1})
         }, label, brandKwSort.k===k ? (brandKwSort.d>0?' ↑':' ↓') : '');
         const copyData = () => ({
-          headers: ['Keyword', 'Marka', 'Katalog', 'Kat 1', 'Kat 2', 'Kat 3', '2024 Avg', '2025 Avg', 'YoY %', 'Peak Ay', 'Peak Çeyrek'],
-          rows: rows.map(r => [
-            r.kw, r.brand || '', r.catalog || '', r.k1, r.k2, r.k3,
-            r.a24, r.a25, (r.yoy*100).toFixed(2)+'%',
-            r.m25 ? TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))] : '',
-            r.m25 ? 'Q'+(Math.floor(r.m25.indexOf(Math.max(...r.m25))/3)+1) : ''
-          ])
+          headers: ['Keyword', 'Marka', 'Katalog', 'Kat 1', 'Kat 2', 'Kat 3', 'Önceki 12 Ay Ort', 'Son 12 Ay Ort', 'YoY %', 'Peak Ay', 'Peak Çeyrek'],
+          rows: rows.map(r => {
+            const roll = rollingOf(r);
+            const pi = roll.indexOf(Math.max(...roll));
+            return [
+              r.kw, r.brand || '', r.catalog || '', r.k1, r.k2, r.k3,
+              r.p12, r.r12, ((r.ryoy||0)*100).toFixed(2)+'%',
+              ROLLING_LABELS[pi] || '',
+              qLabel(peakQuarterIdx(roll))
+            ];
+          })
         });
         return h('div',{className:'card flush', ref: kwListRef, style:{marginBottom:18, scrollMarginTop:170}},
           h('div',{className:'card-title-row', style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
@@ -2676,9 +2797,9 @@ window.TABS = (function(){
                 const csv = toCSV(rows, [
                   {label:'Keyword',key:'kw'}, {label:'Marka',key:'brand'}, {label:'Katalog',key:'catalog'},
                   {label:'Kat 1',key:'k1'}, {label:'Kat 2',key:'k2'}, {label:'Kat 3',key:'k3'},
-                  {label:'2024 Avg',key:'a24'}, {label:'2025 Avg',key:'a25'}, {label:'YoY',key:'yoy'},
-                  {label:'Peak Ay', get:r => r.m25 ? TR_MONTHS[r.m25.indexOf(Math.max(...r.m25))] : ''},
-                  ...TR_MONTHS.map((m,i)=>({label:m+' 2025', get:r=>r.m25[i]}))
+                  {label:'Önceki 12 Ay Ort',key:'p12'}, {label:'Son 12 Ay Ort',key:'r12'}, {label:'YoY',key:'ryoy'},
+                  {label:'Peak Ay', get:r => {const roll=rollingOf(r); return ROLLING_LABELS[roll.indexOf(Math.max(...roll))];}},
+                  ...ROLLING_LABELS.map((m,i)=>({label:m, get:r=>rollingOf(r)[i]}))
                 ]);
                 downloadCSV(`${BRAND_SLUG}-brand-keywords.csv`, csv);
               }
@@ -2692,16 +2813,17 @@ window.TABS = (function(){
                 h('th',null,'Katalog'),
                 tth('Kat 1','k1'),
                 tth('Kat 2','k2'),
-                tth('2024 Avg','a24',true),
-                tth('2025 Avg','a25',true),
-                tth('YoY','yoy',true),
+                tth('Önceki 12 Ay','p12',true),
+                tth('Son 12 Ay','r12',true),
+                tth('YoY','ryoy',true),
                 h('th',null,'12 Ay'),
                 h('th',null,'Peak')
               )),
               h('tbody',null,
                 kwPageRows.length === 0 && h('tr',null, h('td',{colSpan:10, className:'empty'}, 'Filtreye uyan keyword yok')),
                 kwPageRows.map((r,i) => {
-                  const pi = r.m25 ? r.m25.indexOf(Math.max(...r.m25)) : -1;
+                  const roll = rollingOf(r);
+                  const pi = roll.length ? roll.indexOf(Math.max(...roll)) : -1;
                   return h('tr',{key:brandKwPage*perK+i, className:'clickable', onClick:()=>setKeywordModal(r)},
                     h('td',{className:'kw-cell', style:{maxWidth:200}}, r.kw),
                     h('td',{style:{fontSize:11, fontWeight:500}}, r.brand || '-'),
@@ -2713,11 +2835,11 @@ window.TABS = (function(){
                       )
                     ),
                     h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
-                    h('td',{className:'num', title:fmtFull(r.a24)}, fmtNum(r.a24)),
-                    h('td',{className:'num', title:fmtFull(r.a25)}, fmtNum(r.a25)),
-                    h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
-                    h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
-                    h('td',null, pi>=0 ? h('span',{className:'pill neu'}, TR_MONTHS[pi]) : '-')
+                    h('td',{className:'num', title:fmtFull(r.p12)}, fmtNum(r.p12)),
+                    h('td',{className:'num', title:fmtFull(r.r12)}, fmtNum(r.r12)),
+                    h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
+                    h('td',{style:{width:110}}, h(Sparkline,{values:roll, w:100, h:26})),
+                    h('td',null, pi>=0 ? h('span',{className:'pill neu'}, ROLLING_LABELS[pi]) : '-')
                   );
                 })
               )
@@ -2758,8 +2880,8 @@ window.TABS = (function(){
           if (!col) continue;
           colSet.add(col);
           if (!brandMap[b]) brandMap[b] = { brand: b, catalog: k.catalog || '', total: 0, cells: {} };
-          brandMap[b].total += (k.a25 || 0) * 12;
-          brandMap[b].cells[col] = (brandMap[b].cells[col] || 0) + (k.a25 || 0) * 12;
+          brandMap[b].total += (k.r12 || 0) * 12;
+          brandMap[b].cells[col] = (brandMap[b].cells[col] || 0) + (k.r12 || 0) * 12;
         }
         const brands = Object.values(brandMap).sort((a,b) => b.total - a.total);
         // When at Kat 1 level columns are categories; use katColor lookup. For K2/K3 use parent K1 color via mapping.
@@ -2888,9 +3010,9 @@ window.TABS = (function(){
               th('Marka','brand'),
               h('th',null,'Katalog'),
               th('KW','count',true),
-              th('2024 Avg','sum24',true),
-              th('2025 Avg','sum25',true),
-              th('YoY','yoy',true),
+              th('Önceki 12 Ay','sumP12',true),
+              th('Son 12 Ay','sumR12',true),
+              th('YoY','ryoy',true),
               h('th',null,'12 Ay'),
               th('Peak','peakI'),
               th('Ana Kat','topK1')
@@ -2904,19 +3026,19 @@ window.TABS = (function(){
                   h('td',null, h('strong',null, b.brand)),
                   h('td',null, h('span',{className:'pill '+(b.catalog==='Var'?'pos':b.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, b.catalog || '-')),
                   h('td',{className:'num'}, fmtNum(b.count)),
-                  h('td',{className:'num', title: fmtFull(toMonthlyAvg(b.sum24))}, fmtNum(toMonthlyAvg(b.sum24))),
-                  h('td',{className:'num', title: fmtFull(toMonthlyAvg(b.sum25))}, fmtNum(toMonthlyAvg(b.sum25))),
-                  h('td',{className:'num'}, h(YoYPill,{yoy:b.yoy})),
+                  h('td',{className:'num', title: fmtFull(toMonthlyAvg(b.sumP12))}, fmtNum(toMonthlyAvg(b.sumP12))),
+                  h('td',{className:'num', title: fmtFull(toMonthlyAvg(b.sumR12))}, fmtNum(toMonthlyAvg(b.sumR12))),
+                  h('td',{className:'num'}, h(YoYPill,{yoy:b.ryoy})),
                   h('td',{style:{width:130}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:6}},
-                      h(Sparkline,{values:b.m25, w:90, h:26}),
-                      (() => { const arr = recentTrendArrow(b.m25); return arr ? h('span',{
+                      h(Sparkline,{values:b.rollM, w:90, h:26}),
+                      (() => { const arr = recentTrendArrow(b.rollM); return arr ? h('span',{
                         title: arr.title,
                         style:{fontSize:14, fontWeight:700, color: arr.color, lineHeight:1}
                       }, arr.char) : null; })()
                     )
                   ),
-                  h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, TR_MONTHS[b.peakI]) : '-'),
+                  h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, ROLLING_LABELS[b.peakI]) : '-'),
                   h('td',{style:{fontSize:11}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
                       h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(b.topK1),flexShrink:0}}),
@@ -2948,8 +3070,8 @@ window.TABS = (function(){
                         h('thead',null, h('tr',null,
                           h('th',null,'Kat 2'),
                           h('th',{className:'num'},'KW'),
-                          h('th',{className:'num'},'2024 Avg'),
-                          h('th',{className:'num'},'2025 Avg'),
+                          h('th',{className:'num'},'Önceki 12 Ay'),
+                          h('th',{className:'num'},'Son 12 Ay'),
                           h('th',{className:'num'},'YoY'),
                           h('th',null,'12 Ay'),
                           h('th',null,'Top Keyword\'ler')
@@ -2958,10 +3080,10 @@ window.TABS = (function(){
                           b.k2Rows.map((r, ri) => h('tr',{key:ri},
                             h('td',null, h('strong',null, r.k2)),
                             h('td',{className:'num'}, fmtNum(r.count)),
-                            h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sum24))}, fmtNum(toMonthlyAvg(r.sum24))),
-                            h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sum25))}, fmtNum(toMonthlyAvg(r.sum25))),
-                            h('td',{className:'num'}, h(YoYPill,{yoy:r.yoy})),
-                            h('td',{style:{width:110}}, h(Sparkline,{values:r.m25, w:100, h:26})),
+                            h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sumP12))}, fmtNum(toMonthlyAvg(r.sumP12))),
+                            h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sumR12))}, fmtNum(toMonthlyAvg(r.sumR12))),
+                            h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
+                            h('td',{style:{width:110}}, h(Sparkline,{values:r.rollM, w:100, h:26})),
                             h('td',{style:{fontSize:11, color:'var(--ink-2)'}},
                               r.topKws.map((k, ki) => h('span',{
                                 key:ki, className:'clickable',
@@ -2972,7 +3094,7 @@ window.TABS = (function(){
                                   border:'1px solid var(--line)', borderRadius:12,
                                   fontSize:11, cursor:'pointer'
                                 }
-                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:10}}, fmtNum(k.a25))))
+                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:10}}, fmtNum(k.r12))))
                             )
                           ))
                         )
@@ -2995,10 +3117,14 @@ window.TABS = (function(){
   }
 
   // === Keyword Modal ===
-  function KeywordModal({kw, onClose}) {
-    const peakIdx = kw.m25 ? kw.m25.indexOf(Math.max(...kw.m25)) : -1;
-    const dipIdx = kw.m25 ? kw.m25.indexOf(Math.min(...kw.m25)) : -1;
-    const cvVal = kw.m25 ? cv(kw.m25) : null;
+  function KeywordModal({kw, onClose, viewMode='rolling'}) {
+    const roll = rollingOf(kw);
+    const hasRoll = roll && roll.length === 12;
+    const peakIdx = hasRoll ? roll.indexOf(Math.max(...roll)) : -1;
+    const dipIdx = hasRoll ? roll.indexOf(Math.min(...roll)) : -1;
+    const cvVal = hasRoll ? cv(roll) : null;
+    const prevRoll = prevRollingOf(kw);
+    const m26pad = kw.m26 ? pad12(kw.m26.slice(0, N26)) : null;
 
     return h(Modal,{onClose},
       h('div',null,
@@ -3006,16 +3132,18 @@ window.TABS = (function(){
         h('h1',{style:{fontSize:26,marginBottom:16}}, kw.kw),
         h('div',{style:{display:'flex',gap:20,marginBottom:20,flexWrap:'wrap'}},
           h('div',null,
-            h('div',{className:'lbl-cat'},'2024 Ort.'),
-            h('div',{className:'num', style:{fontSize:20,fontWeight:600}}, fmtFull(kw.a24))
+            h('div',{className:'lbl-cat'},'Önceki 12 Ay Ort.'),
+            h('div',{className:'num', style:{fontSize:20,fontWeight:600}}, fmtFull(kw.p12)),
+            h('div',{className:'txt-3', style:{fontSize:10}}, P12_RANGE)
           ),
           h('div',null,
-            h('div',{className:'lbl-cat'},'2025 Ort.'),
-            h('div',{className:'num', style:{fontSize:20,fontWeight:600}}, fmtFull(kw.a25))
+            h('div',{className:'lbl-cat'},'Son 12 Ay Ort.'),
+            h('div',{className:'num', style:{fontSize:20,fontWeight:600}}, fmtFull(kw.r12)),
+            h('div',{className:'txt-3', style:{fontSize:10}}, R12_RANGE)
           ),
           h('div',null,
             h('div',{className:'lbl-cat'},'YoY Değişim'),
-            h('div',{style:{fontSize:20}}, h(YoYPill,{yoy:kw.yoy}))
+            h('div',{style:{fontSize:20}}, h(YoYPill,{yoy:kw.ryoy}))
           ),
           kw.bucket && h('div',null,
             h('div',{className:'lbl-cat'},'Hacim Kova'),
@@ -3027,41 +3155,52 @@ window.TABS = (function(){
           )
         ),
 
-        kw.m25 && h('div',{style:{marginBottom:20}},
-          h('h3',{style:{marginBottom:10}},'12 Aylık Trend'),
-          h(LineChart,{
-            series:[
-              kw.m24 && {name:'2024', values:kw.m24, color:'#8A8A8A'},
-              {name:'2025', values:kw.m25, color:'#FF7B52', peakIdx}
-            ].filter(Boolean),
-            legend:true, height:240
-          })
+        hasRoll && h('div',{style:{marginBottom:20}},
+          h('h3',{style:{marginBottom:10}}, viewMode === 'calendar' ? 'Aylık Trend · Takvim Yılları' : `Aylık Trend · Son vs Önceki 12 Ay`),
+          viewMode === 'calendar'
+            ? h(LineChart,{
+                series:[
+                  kw.m24 && {name:'2024', shortName:'2024', pointLabels:calLabelsFor('24'), values:kw.m24, color:'color-mix(in srgb, var(--ink-3) 55%, transparent)'},
+                  kw.m25 && {name:'2025', shortName:'2025', pointLabels:calLabelsFor('25'), values:kw.m25, color:'color-mix(in srgb, var(--ink-3) 90%, transparent)'},
+                  m26pad && {name:'2026', shortName:'2026', pointLabels:calLabelsFor('26'), values:m26pad, color:'#FF7B52'}
+                ].filter(Boolean),
+                labels: TR_MONTHS,
+                legend:true, height:240
+              })
+            : h(LineChart,{
+                series:[
+                  prevRoll && {name:`Önceki 12 Ay (${P12_RANGE})`, shortName:'Önceki 12 Ay', pointLabels:P12_LABELS, values:prevRoll, color:'#8A8A8A'},
+                  {name:`Son 12 Ay (${R12_RANGE})`, shortName:'Son 12 Ay', pointLabels:ROLLING_LABELS, values:roll, color:'#FF7B52', peakIdx}
+                ].filter(Boolean),
+                labels: ROLLING_LABELS,
+                legend:true, height:240
+              })
         ),
 
-        kw.m25 && h('div',{className:'grid grid-2', style:{marginBottom:16}},
+        hasRoll && h('div',{className:'grid grid-2', style:{marginBottom:16}},
           h('div',null,
             h('div',{className:'lbl-cat'},'Peak ay'),
             h('div',{style:{fontSize:15,fontWeight:600}},
-              TR_MONTHS_LONG[peakIdx], ' · ', h('span',{className:'num'}, fmtFull(kw.m25[peakIdx]))
+              rollingLongLabel(peakIdx), ' · ', h('span',{className:'num'}, fmtFull(roll[peakIdx]))
             )
           ),
           h('div',null,
             h('div',{className:'lbl-cat'},'Dip ay'),
             h('div',{style:{fontSize:15,fontWeight:600}},
-              TR_MONTHS_LONG[dipIdx], ' · ', h('span',{className:'num'}, fmtFull(kw.m25[dipIdx]))
+              rollingLongLabel(dipIdx), ' · ', h('span',{className:'num'}, fmtFull(roll[dipIdx]))
             )
           )
         ),
 
-        kw.m25 && h('div',{style:{fontSize:13,color:'var(--ink-2)',lineHeight:1.6,background:'var(--line-soft)',padding:14,borderRadius:8, display:'flex', gap:10, alignItems:'flex-start'}},
+        hasRoll && h('div',{style:{fontSize:13,color:'var(--ink-2)',lineHeight:1.6,background:'var(--line-soft)',padding:14,borderRadius:8, display:'flex', gap:10, alignItems:'flex-start'}},
           h('span',{style:{color:'var(--coral)', paddingTop:2, flexShrink:0}}, I.Bulb(16)),
           h('div',null,
             h('strong',null,'Aksiyon: '),
             cvVal > 0.3 ?
-              `Yüksek mevsimsel bir keyword. İçeriğin ${TR_MONTHS_LONG[peakIdx]} peak'inden 4-6 hafta önce güncellenmesi; ranking takviminin bu ritim üzerinden kurgulanması önerilebilir.` :
+              `Yüksek mevsimsel bir keyword. İçeriğin ${rollingLongLabel(peakIdx)} peak'inden 4-6 hafta önce güncellenmesi; ranking takviminin bu ritim üzerinden kurgulanması önerilebilir.` :
               cvVal > 0.15 ?
-              `Orta mevsimsel. ${TR_MONTHS_LONG[peakIdx]} civarı öne çıkıyor; ancak yıl boyu hacim olduğundan evergreen içerik + sezonsal boost kombinasyonu değerlendirilebilir.` :
-              `Evergreen bir keyword. Sıralamanın sürekli korunması önerilir; ${kw.yoy>0?'hacim büyüyor, fırsat değerlendirilebilir':'erime var, rakip analizi faydalı olabilir'}.`
+              `Orta mevsimsel. ${rollingLongLabel(peakIdx)} civarı öne çıkıyor; ancak yıl boyu hacim olduğundan evergreen içerik + sezonsal boost kombinasyonu değerlendirilebilir.` :
+              `Evergreen bir keyword. Sıralamanın sürekli korunması önerilir; ${kw.ryoy>0?'hacim büyüyor, fırsat değerlendirilebilir':'erime var, rakip analizi faydalı olabilir'}.`
           )
         )
       )

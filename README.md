@@ -6,7 +6,8 @@ Brand-agnostic, Turkish-language keyword seasonality dashboard. Ships with an ex
 
 ## Ne işe yarar?
 
-- 2024 ↔ 2025 YoY keyword arama hacmi karşılaştırması
+- Rolling **Son 12 Ay ↔ Önceki 12 Ay** keyword arama hacmi karşılaştırması (güncel pencere: Tem 2025 – Haz 2026 vs Tem 2024 – Haz 2025)
+- 2024 / 2025 / 2026 takvim yılı aylık verileri korunur; grafiklerde "Takvim Yılı / Rolling 12 Ay" görünüm anahtarı
 - Kat 1 / Kat 2 / Kat 3 3-seviyeli kategori hiyerarşisi
 - Sezonsallık heatmap (12 ay × kategori)
 - Yükselen / düşen keyword trendleri
@@ -115,24 +116,29 @@ Tüm keyword'leri içeren ana sheet. Kolonlar:
 | \<12 × Excel serial\> | number | 2024 Jan–Dec aylık hacim |
 | Bucket | string | Hacim bandı ("0-1.000", "1.000-2.000", vs.) |
 | \<12 × Excel serial\> | number | 2025 Jan–Dec aylık hacim |
+| \<N × Excel serial\> | number | 2026 aylık hacim (şu an Jan–Jun, `merge-2026.js` tarafından eklenir) |
+| R12 Avg / P12 Avg | number | Son 12 Ay / Önceki 12 Ay aylık ortalama |
+| R12 YoY | number | Rolling YoY (P12 → R12); P12=0 ise boş |
+| R12 \nQ1..Q4 Peak | 0/1 | Rolling pencerede takvim çeyreği peak flag'leri |
+| R12 En Yuksek Ay? | serial | Rolling penceredeki peak ayın serial'i |
 
 "VitrA Not" gibi brand-specific kolonlar varsa yok sayılır — zarar vermez.
 
 ### 2. `Özet Dashboard`
 
-Kat 1 özeti. Kolonlar: `Kat 1`, `Keyword Sayısı`, `2024 Toplam Hacim`, `2025 Toplam Hacim`, `YoY Değişim`, `Pazar Payı (2025)`, `Peak Çeyrek`, `En Yüksek Hacimli 3 Keyword`, `En Çok Artan Keyword`, `En Çok Düşen Keyword`.
+Kat 1 özeti. Kolonlar: `Kat 1`, `Keyword Sayısı`, `2024 Toplam Hacim`, `2025 Toplam Hacim`, `YoY Değişim` (takvim), `Son 12 Ay Toplam`, `Önceki 12 Ay Toplam`, `Rolling YoY`, `Pazar Payı (Son 12 Ay)`, `Peak Çeyrek` (rolling), `En Yüksek Hacimli 3 Keyword`, `En Çok Artan Keyword`, `En Çok Düşen Keyword` (rolling bazlı).
 
 ### 3. `Kat 1 Sez.` / `Kat 2 Sez.` / `Kat 3 Sez.`
 
-Kat bazında aylık aggregate. Kolonlar: (Kat N × N), `2024 Avg. Search Volume`, `2025 Avg. Search Volume`, `YoY Change`, `Q1-Q4 Peak` (header'da \n var), `En Yuksek Ay?`, 12 aylık SUM (`SUM of Jan 2025` ... `SUM of Dec 2025`).
+Kat bazında aylık aggregate. Kolonlar: (Kat N × N), `2024 Avg. Search Volume`, `2025 Avg. Search Volume`, `YoY Change`, `Q1-Q4 Peak` (header'da \n var), `En Yuksek Ay?`, 12 aylık SUM (`SUM of Jan 2025` ... `SUM of Dec 2025`), 2026 SUM kolonları (`SUM of Jan 2026` ...), ardından `R12 Avg`, `P12 Avg`, `R12 YoY`, `R12 Q1-Q4 Peak`, `R12 En Yuksek Ay?`.
 
 ### 4. `Top Yükselen & Düşenler`
 
-Kolonlar: `Kat 1`, `Kat 2`, `Kat 3`, `Keyword`, `2024 Avg`, `2025 Avg`, `YoY Değişim`, `Trend` (YÜKSELEN/DÜŞEN).
+Kolonlar: `Kat 1`, `Kat 2`, `Kat 3`, `Keyword`, `Önceki 12 Ay Ort`, `Son 12 Ay Ort`, `YoY Değişim` (rolling), `Trend` (YÜKSELEN/DÜŞEN).
 
 ### 5. `Sezonsallık Tipi`
 
-Kolonlar: `Kat 1`, `Kat 2`, `Keyword`, `2025 Avg`, `CV Skoru`, `Mevsimsellik Tipi` (Evergreen / Orta Mevsimsellik / Yüksek Mevsimsellik), `Peak Ay`, `Dip Ay`, `Peak/Dip Oranı`.
+Kolonlar: `Kat 1`, `Kat 2`, `Keyword`, `Son 12 Ay Ort`, `CV Skoru` (rolling pencere), `Mevsimsellik Tipi` (Evergreen / Orta Mevsimsellik / Yüksek Mevsimsellik), `Peak Ay`, `Dip Ay` (rolling serial), `Peak/Dip Oranı`.
 
 ### 6. `Peak Quarter Analizi`
 
@@ -140,17 +146,17 @@ Kolonlar: `Kat 1`, `Kat 2`, `KW Sayısı`, `Toplam Hacim`, `Q1 Peak %`, `Q2 Peak
 
 ### 7. `Akıllı Ürün Trendi`
 
-Kolonlar: `Kat 1`, `Kat 2`, `Keyword`, `2024 Avg`, `2025 Avg`, `YoY Değişim`, `Peak Ay`, `Segment Tag`.
+Kolonlar: `Kat 1`, `Kat 2`, `Keyword`, `Önceki 12 Ay Ort`, `Son 12 Ay Ort`, `YoY Değişim` (rolling), `Peak Ay` (rolling serial), `Segment Tag`.
 
 ### 8. `Fiyat Intent`
 
-Kolonlar: `Kat 1`, `Kat 2`, `Keyword`, `2024 Avg`, `2025 Avg`, `YoY Değişim`, `Peak Ay`.
+Kolonlar: `Kat 1`, `Kat 2`, `Keyword`, `Önceki 12 Ay Ort`, `Son 12 Ay Ort`, `YoY Değişim` (rolling), `Peak Ay` (rolling serial).
 
 ### 9. `Hacme Göre Top KWs`
 
 İki bölümlü sheet:
-- **Rows 2-5:** Quartile özeti. Kolonlar: `Quartile`, `KW Sayısı`, `Toplam 2025 Hacim`, `Ort. 2025 Avg`, `Min-Max Hacim Aralığı`, `Ort. YoY Değişim`, `Artan KW %`, `Azalan KW %`, `Ort. CV (Mevsimsellik)`.
-- **Row 8 header, rows 9+:** Quartile başına top keyword'ler. Kolonlar: `Quartile`, `Keyword`, `Kat 1`, `Kat 2`, `2025 Avg`, `YoY Değişim`, `CV`, `Peak Ay`, `Trend Yönü` (Artan/Azalan/Sabit).
+- **Rows 2-5:** Quartile özeti. Kolonlar: `Quartile`, `KW Sayısı`, `Toplam Son 12 Ay Hacim`, `Ort. Son 12 Ay`, `Min-Max Hacim Aralığı`, `Ort. YoY Değişim`, `Artan KW %`, `Azalan KW %`, `Ort. CV (Mevsimsellik)`.
+- **Row 8 header, rows 9+:** Quartile başına top keyword'ler. Kolonlar: `Quartile`, `Keyword`, `Kat 1`, `Kat 2`, `Son 12 Ay Ort`, `YoY Değişim`, `CV`, `Peak Ay`, `Trend Yönü` (Artan/Azalan/Sabit).
 
 ---
 
@@ -191,7 +197,7 @@ window.BRAND = {
 - `slug` → `"dashboard"`
 - `agency.show` → `false`
 
-**Auto palette** (Tableau 10 colorblind-friendly): `#4E79A7 #F28E2B #E15759 #76B7B2 #59A14F #EDC948 #B07AA1 #FF9DA7 #9C755F #BAB0AC`. Kat 1'ler 2025 toplam hacmine göre sıralanır, palette sırayla atanır.
+**Auto palette** (Tableau 10 colorblind-friendly): `#4E79A7 #F28E2B #E15759 #76B7B2 #59A14F #EDC948 #B07AA1 #FF9DA7 #9C755F #BAB0AC`. Kat 1'ler Son 12 Ay toplam hacmine göre sıralanır, palette sırayla atanır.
 
 ---
 
@@ -203,6 +209,23 @@ npm install
 npm run build        # xlsx → dashboard.js
 npm start            # http://localhost:3000
 ```
+
+### Yeni dönem verisi ekleme (GKP export merge)
+
+Google Keyword Planner'dan yeni aylık export geldiğinde (ör. 2026 H2):
+
+```bash
+npm run merge -- --in-catalog "/path/Keyword Stats <in-catalog>.xlsx" --out-catalog "/path/Keyword Stats <markalar>.xlsx"
+npm run build
+npm test
+```
+
+`scripts/merge-2026.js`:
+- GKP dosyalarındaki `Searches: <Mon> <Year>` kolonlarını dinamik keşfeder; mevcut 2026 kolonlarının üzerine upsert eder.
+- Keyword eşleşmesi Türkçe-locale-duyarlı normalize ile yapılır; source'ta olup exportta olmayan keyword'ler 0 ile doldurulur ve loglanır. Exportta olup source'ta olmayan keyword sayısı 20'yi aşarsa yanlış dosya varsayılıp abort edilir.
+- Rolling pencere otomatik kayar: verideki son 12 ay = "Son 12 Ay", önceki 12 ay = "Önceki 12 Ay". Tüm türetilmiş sheet'ler (trend, sezonsallık tipi, peak quarter, akıllı trend, fiyat intent, quartile, brands) rolling pencereye göre yeniden hesaplanır. `--dry-run` ve `--out <path>` desteklenir.
+
+Not: GKP aylık hacimleri bucketlanmış değerlerdir; rolling ortalamalar bu bucketlanmış değerler üzerinden hesaplanır.
 
 ### Testler
 ```bash

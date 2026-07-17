@@ -308,7 +308,12 @@ h4 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacin
 .kpi .chip.pos { background: var(--green-wash); color: var(--green); }
 .kpi .chip.neg { background: var(--red-wash); color: var(--red); }
 .kpi .chip.neu { background: var(--line-soft); color: var(--ink-2); }
-.kpi .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+/* Accent KPI: sol kenar şeridi yerine soluk çerçeve + hafif zemin */
+.kpi .bar { display: none; }
+.kpi:has(.bar) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
+}
 
 /* Table */
 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -856,16 +861,16 @@ h4 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacin
   border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
 }
 [data-theme="dark"] .insight-strip {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 18%, var(--bg-card)), var(--bg-card));
-  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
   color: var(--ink);
 }
 [data-theme="dark"] .insight-strip strong { color: color-mix(in srgb, var(--accent) 60%, var(--ink)); }
 [data-theme="dark"] .explainer-head {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, var(--bg-card)), var(--bg-card) 70%);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
 }
 [data-theme="dark"] .explainer-head:hover {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, var(--bg-card)), var(--bg-card) 50%);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-card));
 }
 [data-theme="dark"] .filter-chip {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
@@ -886,11 +891,12 @@ h4 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacin
 tr.row-hl { background: var(--accent-wash) !important; }
 
 /* Insight strip */
+/* Vurgu: kenar şeridi yerine ince soluk çerçeve + hafif zemin tonu */
 .insight-strip {
   display: flex; gap: 16px; padding: 14px 18px;
-  background: linear-gradient(90deg, var(--accent-wash), transparent);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: var(--r-md);
   margin-bottom: 18px; font-size: 13px;
 }
 .insight-strip .arrow {
@@ -1018,9 +1024,9 @@ button.action-card:hover { border-color: currentColor; transform: translateY(-1p
 .info-modal-body li { margin-bottom: 4px; }
 .info-modal-body .info-note {
   margin-top: 14px; padding: 10px 12px;
-  background: var(--surface);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  border-radius: 6px;
   font-size: 12px;
 }
 .info-modal-body .info-note strong { color: var(--accent-deep); }
@@ -1028,7 +1034,7 @@ button.action-card:hover { border-color: currentColor; transform: translateY(-1p
 /* Expandable explainer */
 .explainer {
   background: var(--bg-card);
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   border-radius: var(--r-lg);
   margin-bottom: 18px;
   overflow: hidden;
@@ -1038,12 +1044,11 @@ button.action-card:hover { border-color: currentColor; transform: translateY(-1p
 .explainer-head {
   display: flex; align-items: center; gap: 12px;
   padding: 16px 20px; cursor: pointer;
-  background: linear-gradient(90deg, var(--accent-wash), transparent 70%);
-  border-left: 3px solid var(--accent);
-  width: 100%; border-top: 0; border-right: 0; border-bottom: 0;
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+  width: 100%; border: 0;
   font-family: inherit; text-align: left; color: var(--ink);
 }
-.explainer-head:hover { background: linear-gradient(90deg, var(--accent-wash), transparent 50%); }
+.explainer-head:hover { background: color-mix(in srgb, var(--accent) 11%, var(--bg-card)); }
 .explainer-head .emoji { font-size: 22px; flex-shrink: 0; }
 .explainer-head .explainer-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1066,8 +1071,8 @@ button.action-card:hover { border-color: currentColor; transform: translateY(-1p
 
 /* Yıldız yükselişler (B3) */
 .card-stars {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--coral) 8%, var(--bg-card)) 0%, var(--bg-card) 60%);
-  border-left: 3px solid var(--coral);
+  background: color-mix(in srgb, var(--coral) 5%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--coral) 30%, var(--line));
 }
 .card-stars .stars-badge {
   display: inline-flex; align-items: center; justify-content: center;

@@ -58,6 +58,9 @@ window.DATA = {
   // Aylar (string labels)
   months2024: ['2024-01', ..., '2024-12'],
   months2025: ['2025-01', ..., '2025-12'],
+  months2026: ['2026-01', ..., '2026-06'],        // mevcut 2026 ayları (merge sonrası büyür)
+  monthsR12:  ['2025-07', ..., '2026-06'],        // Son 12 Ay penceresi
+  monthsP12:  ['2024-07', ..., '2025-06'],        // Önceki 12 Ay penceresi
 
   // Ana keyword evreni — en ayrıntılı veri seviyesi
   keywords: [{
@@ -65,37 +68,49 @@ window.DATA = {
     brand,                   // opsiyonel — marka adı (varsa)
     catalog,                 // opsiyonel — 'Var' / 'Yok' / '' (Özdilek'e özel)
     kw,                      // keyword string
-    a24, a25,                // aylık ortalama arama hacmi (2024, 2025)
-    yoy,                     // YoY change oran (0.15 = +%15)
+    a24, a25,                // aylık ortalama arama hacmi (2024, 2025 — takvim, korunur)
+    yoy,                     // takvim YoY (2024→2025, korunur; UI karşılaştırmaları rolling kullanır)
+    r12, p12,                // Son 12 Ay / Önceki 12 Ay aylık ortalama
+    ryoy,                    // rolling YoY (p12→r12); p12=0 ise null
+    rpq,                     // rolling pencerede takvim çeyreği peak flag'leri [Q1,Q2,Q3,Q4]
+    rpeakSerial,             // rolling penceredeki peak ayın Excel serial'i
     pq: [q1,q2,q3,q4],       // peak quarter flag'leri (0/1)
     peakSerial,              // peak ayın Excel serial numarası
     m24, m25,                // 12-aylık array'ler
+    m26,                     // 2026 aylık array (şu an 6 eleman: Oca-Haz)
     bucket                   // hacim bandı ('0-1.000', '1.000-2.000', ...)
   }, ...],
 
   // Kat 1 özet (OzetTab için önceden agregate)
-  kat1Summary: [{k1, kwCount, tot24, tot25, yoy, share, peakQ, top3, topGain, topLoss}, ...],
+  kat1Summary: [{k1, kwCount, tot24, tot25, yoy, totR12, totP12, ryoy, share, peakQ, top3, topGain, topLoss}, ...],  // share/peakQ/topGain/topLoss rolling bazlı
 
   // Aylık aggregate (Kat 1/2/3 seviyesinde)
   kat1Monthly / kat2Monthly / kat3Monthly: [{
-    labels: [k1, k2?, k3?], a24, a25, yoy, pq, m25
+    labels: [k1, k2?, k3?], a24, a25, yoy, pq, m25, m26, r12, p12, ryoy, rpq, rpeakSerial
   }, ...],
 
   // Analizler (TrendlerTab için)
-  trendRows: [{k1, k2, k3, kw, a24, a25, yoy, trend:'YÜKSELEN'/'DÜŞEN'}, ...],
-  sezType: [{k1, k2, kw, a25, cv, type:'Evergreen'/..., peakMonth, dipMonth, pdRatio}, ...],
+  trendRows: [{k1, k2, k3, kw, prev, last, ryoy, trend:'YÜKSELEN'/'DÜŞEN'}, ...],  // prev/last = Önceki/Son 12 Ay ort
+  sezType: [{k1, k2, kw, last, cv, type:'Evergreen'/..., peakMonth, dipMonth, pdRatio}, ...],  // rolling pencere; peak/dip rolling serial
   peakQ: [{k1, k2, count, vol, q1, q2, q3, q4, dominant}, ...],
-  smart: [{k1, k2, kw, a24, a25, yoy, peakMonth, tag:'Yıldız'/...}, ...],
-  price: [{k1, k2, kw, a24, a25, yoy, peakMonth}, ...],
+  smart: [{k1, k2, kw, prev, last, ryoy, peakMonth, tag:'Yıldız'/...}, ...],
+  price: [{k1, k2, kw, prev, last, ryoy, peakMonth}, ...],
   volQ, volQKws, ...,
 
   // Brand-specific (opsiyonel, Özdilekteyim için eklendi)
   outKeywords: [...],        // Özdilek dışı markalara ait keyword'ler (Yok flag'li)
-  brands: [{brand, catalog, sum24, sum25, yoy, pq, peakSerial, m25}, ...]
+  brands: [{brand, catalog, a24, a25, yoy, pq, peakSerial, m25, m26, r12, p12, ryoy, rpq, rpeakSerial}, ...]
 };
 ```
 
-`window.KAT1_COLORS` ve `window.BRAND_ACCENT` — build-data.js'in ürettiği renk paleti (Tableau 10 colorblind-friendly, 2025 hacmine göre sırayla atanır).
+### Rolling 12 Ay modeli
+
+- Tüm KPI ve YoY karşılaştırmaları **Son 12 Ay (monthsR12) vs Önceki 12 Ay (monthsP12)** üzerinden yapılır; takvim yılı verileri (m24/m25/m26) korunur ve "Takvim Yılı" grafik görünümünde kullanılır.
+- Görünüm anahtarı `viewMode` (`'rolling'` | `'calendar'`) app.jsx'te yaşar, `globalFilter.viewMode` üzerinden tab'lara geçer, localStorage'da saklanır. PlannedTab bu modelden bağımsızdır.
+- utils.js rolling helper'ları: `rollingOf(k)` (son 12 ay serisi = concat(m24,m25,m26).slice(-12)), `prevRollingOf(k)`, `aggregateRolling(kws)`, `ROLLING_LABELS` ("Tem 25"…"Haz 26"), `serialToRollingLabel(serial)`, `rollingIdxToCalMonth(i)`.
+- Veri güncelleme akışı: GKP export → `npm run merge` (scripts/merge-2026.js: source.xlsx'e ay kolonlarını upsert eder + türetilmiş sheet'leri rolling'e göre yeniden üretir) → `npm run build` → `npm test`.
+
+`window.KAT1_COLORS` ve `window.BRAND_ACCENT` — build-data.js'in ürettiği renk paleti (Tableau 10 colorblind-friendly, Son 12 Ay hacmine göre sırayla atanır).
 
 ---
 
@@ -457,7 +472,7 @@ CSS:
 6. **Filter layout**: Hepsi/Hiçbiri + search bar + MultiSelect patterni tutarlı, secondary filtreler ikinci satırda
 7. **Brand-agnostic core**: Marka-spesifik logic prep-*.js'e taşınır, template'e dokunmadan genişletilir
 8. **Dark mode**: `color-mix(... var(--bg-card))` kullanımı ile otomatik uyum
-9. **Monthly avg everywhere**: Brand/kategori aggregate'lerinde `sum25/12` göster, `toMonthlyAvg()` helper kullan, "2024 Avg" / "2025 Avg" label'ı
+9. **Monthly avg everywhere**: Brand/kategori aggregate'lerinde `sumR12/12` göster, `toMonthlyAvg()` helper kullan, "Önceki 12 Ay" / "Son 12 Ay" label'ı
 10. **Drill-down via global state**: Kategori Pazar Payı + Marka × Kategori matrisi `globalK1/K2` durumuna göre otomatik Kat1→Kat2→Kat3 drill eder — ayrı bir state gerekmez
 11. **Copy to clipboard**: Her tablo/matrisin yanında `<CopyButton getData={() => ({headers, rows})} />`. TSV Excel/Sheets'e yapıştırılabilir; pivot alt-satırlar `{indent:1, cells:[...]}` ile işaretlenir
 12. **Smooth scroll**: `html { scroll-behavior: smooth }` + `smoothScrollTo(el)` helper, reduced-motion desteği
