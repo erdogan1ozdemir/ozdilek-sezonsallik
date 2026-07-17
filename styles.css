@@ -710,6 +710,8 @@ h4 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacin
   font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--ink-3); font-weight: 600;
 }
+/* Metrik başlığındaki dönem ipucu ("Tem 25" yanında soluk "Son 12 Ay") */
+.hm-tt-m-hint { margin-left: 5px; font-weight: 500; opacity: .6; text-transform: none; letter-spacing: 0; }
 .hm-tt-m-val { font-family: 'Bricolage Grotesque'; font-size: 14px; font-weight: 700; margin-top: 2px; }
 .hm-tt-footer {
   margin-top: 8px; padding-top: 8px;

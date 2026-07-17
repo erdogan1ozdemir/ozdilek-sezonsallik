@@ -27,4 +27,11 @@
 - **Peak çeyrek yıllandı:** Rolling pencere tam 4 takvim çeyreğini kapsadığı için her çeyrek tek bir yıla düşüyor → "Q3 25", "Q4 25", "Q1 26", "Q2 26". `utils.js`e `ROLLING_Q_LABELS`, `qLabel()`, `quarterSums()`, `peakQuarterIdx()`, `QUARTER_OPTIONS` eklendi. Peak çeyrek artık **son 12 ayın en yüksek hacimli çeyreği** (eskiden peak ayın çeyreği / ≥%75 flag'i). Pill'ler, QStack legend'ı, Kategori Detayları, Keyword tablosu, CSV/Copy exportları ve global "Peak Çeyrek" filtresi + chip'i aynı tanımı kullanıyor (filtre-tablo tutarlılığı).
 - **Parantez tipi süslemeler kaldırıldı** (İçerik Dili Rehberi Bölüm 15.1): yuvarlak kart kenarındaki 3px accent şeritleri (`.insight-strip`, `.info-note`, `.explainer-head`, `.card-stars`, `.kpi .bar`, OutOfCatalog Yıldız/Eriyen kartları) yerine ince soluk çerçeve (`color-mix` accent %26-34) + hafif zemin tonu (%4-6). Dark tema karşılıkları da güncellendi.
 - **Doğrulama:** `npm test` 20/20, esbuild sözdizimi temiz, light + dark tema göz kontrolü, Peak Çeyrek filtresi (Q1 26 → 1,9K kw, tablodaki Peak Ç. ile birebir), console hatasız.
-- **Durum:** main'e pushlandı.
+- **Durum:** main'e pushlandı (032b0fe).
+
+### İkinci revizyon turu (aynı gün)
+
+- **"Grafik Mart 2026'da bitiyor" bulgusu — kök neden:** Veri eksik değil; iki çizgi birebir çakışıyordu. Örnek: `stanley termos` Nis/May/Haz 26'da hem Son 12 Ay hem Önceki 12 Ay = 550.000. GKP hacimleri bucketlanmış olduğu için (450K/550K/673K/823K gibi sabit basamaklar) çakışma sık; üstte çizilen coral çizgi griyi tamamen örtüyor ve grafik erken bitiyormuş gibi görünüyordu.
+  - **Çözüm:** `LineChart`e `series[].dashed` + `series[].overlay` eklendi. Karşılaştırma serileri (rolling'de Önceki 12 Ay; takvimde 2024 & 2025) kesikli çizilir ve `drawSeries` sıralamasıyla en üstte kalır → çakışmada alttaki solid çizgi kesik aralarından görünür. Legend swatch'ları da kesikli. Overlay serilerin noktaları küçültüldü (r=2) ki primary seri gizlenmesin.
+- **Sezon takvimi tooltip'i:** "SON 12 AY / ÖNCEKİ 12 AY" yerine artık hücrenin kendi ayı yılıyla: **TEM 25 / TEM 24** (yanında soluk dönem ipucu). `Heatmap`e `tipLabels` + `prevTipLabels` prop'ları eklendi; `heatmapLabelProps(viewMode)` helper'ı rolling'de ROLLING_LABELS/P12_LABELS, takvimde "Oca 25"/"Oca 24" geçirir. Ay bilgisi metriklerde olduğu için tooltip başlığından kaldırıldı. Line chart tooltip'iyle aynı okuma.
+- **Doğrulama:** stanley termos modalinde gri kesikli çizgi Haz 26'ya kadar net; Özet + Kategoriler heatmap tooltip'leri her iki görünümde doğru; `npm test` 20/20; console hatasız.

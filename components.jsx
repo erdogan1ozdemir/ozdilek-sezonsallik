@@ -111,15 +111,20 @@ window.C = (function(){
   }
 
   // Heatmap with hover-value label
-  // periodLabel/prevLabel: tooltip labels for the value and comparison series
-  // (e.g. 'Son 12 Ay' / 'Önceki 12 Ay'); legacy `year` prop still accepted.
-  function Heatmap({rows, monthsLabels=TR_MONTHS, onClickCell, showPeakDot=true, showValues=true, year=null, periodLabel=null, prevLabel=null, showYoY=false}) {
+  // periodLabel/prevLabel: dönem adları ('Son 12 Ay' / 'Önceki 12 Ay') — grid köşesinde ve
+  // tooltip'te dönem ipucu olarak kullanılır; legacy `year` prop'u da kabul edilir.
+  // tipLabels/prevTipLabels: tooltip'te hücrenin kendi ayını yılıyla göstermek için
+  // (ör. 'Tem 25' / 'Tem 24'), line chart tooltip'leriyle aynı okuma.
+  function Heatmap({rows, monthsLabels=TR_MONTHS, tipLabels=null, prevTipLabels=null, onClickCell, showPeakDot=true, showValues=true, year=null, periodLabel=null, prevLabel=null, showYoY=false}) {
     const [hover, setHover] = React.useState(null); // { ri, i, x, y, row, v, prev, yoy, isPeak }
     const hostRef = React.useRef(null);
     const grid = [];
     // Corner - show year label if provided
-    const valLabel = periodLabel || year || 'Son 12 Ay';
-    const cmpLabel = prevLabel || (year ? year - 1 : 'Önceki 12 Ay');
+    const valPeriod = periodLabel || year || 'Son 12 Ay';
+    const cmpPeriod = prevLabel || (year ? year - 1 : 'Önceki 12 Ay');
+    // Tooltip metrik başlıkları: ay etiketi varsa onu (Tem 25), yoksa dönem adını kullan
+    const valTip = (i) => (tipLabels && tipLabels[i]) || valPeriod;
+    const cmpTip = (i) => (prevTipLabels && prevTipLabels[i]) || cmpPeriod;
     grid.push(h('div',{className:'hm-head hm-corner', key:'corner'},
       (periodLabel || year) != null && h('span',{className:'hm-year'}, periodLabel || year)
     ));
@@ -168,15 +173,20 @@ window.C = (function(){
         h('div',{className:'hm-tt-header'},
           hover.isPeak && h('span',{className:'hm-tt-peak-dot'}),
           h('span',{className:'hm-tt-title'}, hover.row.label),
-          h('span',{className:'hm-tt-sub'}, ' · ', hover.month)
+          // Ay bilgisi metriklerin başlığında zaten var; başlıkta tekrarlanmaz
+          !tipLabels && h('span',{className:'hm-tt-sub'}, ' · ', hover.month)
         ),
         h('div',{className:'hm-tt-metrics'},
           h('div',{className:'hm-tt-metric'},
-            h('div',{className:'hm-tt-m-label'}, valLabel),
+            h('div',{className:'hm-tt-m-label'}, valTip(hover.i),
+              tipLabels && h('span',{className:'hm-tt-m-hint'}, valPeriod)
+            ),
             h('div',{className:'hm-tt-m-val'}, fmtFull(hover.v))
           ),
           hover.prev != null && h('div',{className:'hm-tt-metric'},
-            h('div',{className:'hm-tt-m-label'}, cmpLabel),
+            h('div',{className:'hm-tt-m-label'}, cmpTip(hover.i),
+              prevTipLabels && h('span',{className:'hm-tt-m-hint'}, cmpPeriod)
+            ),
             h('div',{className:'hm-tt-m-val', style:{color:'var(--ink-3)'}}, fmtFull(hover.prev))
           ),
           hover.yoy != null && h('div',{className:'hm-tt-metric'},
@@ -313,6 +323,13 @@ window.C = (function(){
       return () => ro.disconnect();
     }, []);
 
+    // Çizim sırası: overlay (karşılaştırma) serileri en üstte kalsın diye sona alınır.
+    // series dizisinin kendi sırası legend ve tooltip için korunur.
+    const drawSeries = React.useMemo(
+      () => [...series].sort((a,b) => (a.overlay?1:0) - (b.overlay?1:0)),
+      [series]
+    );
+
     const w = Math.max(320, containerW), pad = {t:16, r:16, b:28, l:48};
     const cw = w - pad.l - pad.r;
     const ch = height - pad.t - pad.b;
@@ -340,7 +357,10 @@ window.C = (function(){
     return h('div',{ref: wrapRef, className:'chart-wrap', style:{position:'relative', width:'100%'}},
       legend && h('div',{className:'legend', style:{marginBottom:8}},
         series.map((s,i) => h('div',{key:i,className:'li'},
-          h('div',{className:'swatch', style:{background:s.color}}),
+          // Kesikli seriler legend'da da kesikli görünsün
+          s.dashed
+            ? h('div',{className:'swatch', style:{background:'transparent', borderTop:`2px dashed ${s.color}`, borderRadius:0, height:0, alignSelf:'center'}})
+            : h('div',{className:'swatch', style:{background:s.color}}),
           h('span', null, s.name)
         ))
       ),
@@ -356,15 +376,22 @@ window.C = (function(){
           h('text',{x:pad.l-6, y:yAt(t)+3, fontSize:10, fill:'var(--ink-3)', textAnchor:'end'}, yFormat(t))
         )),
         labels.map((l,i) => h('text',{key:'x'+i, x:xs[i], y:height-8, fontSize:10, fill:'var(--ink-3)', textAnchor:'middle'}, l)),
-        series.map((s,si) => {
+        // Karşılaştırma serileri (s.overlay) en son çizilir ve kesikli olur: GKP hacimleri
+        // bucketlandığı için iki dönem birebir çakışabiliyor; kesikli üst çizgi olmadan
+        // alttaki seri tamamen gizlenir ve grafik erken bitiyormuş gibi görünür.
+        drawSeries.map((s,si) => {
           if (!s.values) return null;
           const path = 'M' + s.values.map((v,i) => v==null?null:`${xs[i]},${yAt(v)}`).filter(Boolean).join(' L');
           return h('g',{key:'s'+si},
-            h('path',{d:path, fill:'none', stroke:s.color||'var(--accent)', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round'}),
+            h('path',{
+              d:path, fill:'none', stroke:s.color||'var(--accent)', strokeWidth:2,
+              strokeLinecap:'round', strokeLinejoin:'round',
+              strokeDasharray: s.dashed ? '5 4' : undefined
+            }),
             s.values.map((v,i) => v==null?null:h('circle',{
-              key:'d'+i, cx:xs[i], cy:yAt(v), r: hoverI===i ? 5 : (s.peakIdx===i?4:3),
+              key:'d'+i, cx:xs[i], cy:yAt(v), r: hoverI===i ? 5 : (s.peakIdx===i?4:(s.overlay?2:3)),
               fill: s.peakIdx===i ? '#E85F36' : (s.color||'var(--accent)'),
-              stroke:'white', strokeWidth:1.5
+              stroke:'white', strokeWidth: s.overlay ? 1 : 1.5
             }))
           );
         }),

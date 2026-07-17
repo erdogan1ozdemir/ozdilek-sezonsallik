@@ -170,18 +170,35 @@ window.TABS = (function(){
   }
   // Takvim görünümünde her yıl için "Oca 24 … Ara 24" tipi nokta etiketleri
   const calLabelsFor = (yy) => TR_MONTHS.map(m => `${m} ${yy}`);
+  // Heatmap eksen + tooltip etiketleri (tooltip'te hücrenin kendi ayı yılıyla: Tem 25 / Tem 24)
+  function heatmapLabelProps(viewMode) {
+    if (viewMode === 'calendar') {
+      return {
+        year: 2025,
+        tipLabels: calLabelsFor('25'), prevTipLabels: calLabelsFor('24'),
+        periodLabel: '2025', prevLabel: '2024',
+      };
+    }
+    return {
+      monthsLabels: ROLLING_LABELS,
+      tipLabels: ROLLING_LABELS, prevTipLabels: P12_LABELS,
+      periodLabel: 'Son 12 Ay', prevLabel: 'Önceki 12 Ay',
+    };
+  }
   // Line chart serileri — viewMode'a göre takvim (2024/2025/2026) veya rolling (Son/Önceki 12 Ay).
   // pointLabels: tooltip'te her serinin kendi ayını yılıyla göstermek için (Haz 26 / Haz 25).
+  // overlay+dashed: geçmiş dönem serileri kesikli ve üstte çizilir — hacimler bucketlandığı
+  // için iki dönem birebir çakışabiliyor, aksi halde alttaki çizgi tamamen gizleniyor.
   function lineSeriesFor(viewMode, { m24, m25, m26, roll, prev, peakIdx }) {
     if (viewMode === 'calendar') {
       const series = [];
-      if (m24) series.push({name:'2024', shortName:'2024', pointLabels:calLabelsFor('24'), values:m24, color:'color-mix(in srgb, var(--ink-3) 55%, transparent)'});
-      if (m25) series.push({name:'2025', shortName:'2025', pointLabels:calLabelsFor('25'), values:m25, color:'color-mix(in srgb, var(--ink-3) 90%, transparent)'});
+      if (m24) series.push({name:'2024', shortName:'2024', pointLabels:calLabelsFor('24'), values:m24, color:'color-mix(in srgb, var(--ink-3) 55%, transparent)', dashed:true, overlay:true});
+      if (m25) series.push({name:'2025', shortName:'2025', pointLabels:calLabelsFor('25'), values:m25, color:'color-mix(in srgb, var(--ink-3) 90%, transparent)', dashed:true, overlay:true});
       if (m26) series.push({name:'2026', shortName:'2026', pointLabels:calLabelsFor('26'), values:pad12(m26), color:'var(--coral)'});
       return { series, labels: TR_MONTHS };
     }
     const series = [];
-    if (prev) series.push({name:`Önceki 12 Ay (${P12_RANGE})`, shortName:'Önceki 12 Ay', pointLabels:P12_LABELS, values:prev, color:'color-mix(in srgb, var(--ink-3) 80%, transparent)'});
+    if (prev) series.push({name:`Önceki 12 Ay (${P12_RANGE})`, shortName:'Önceki 12 Ay', pointLabels:P12_LABELS, values:prev, color:'color-mix(in srgb, var(--ink-3) 80%, transparent)', dashed:true, overlay:true});
     if (roll) series.push({name:`Son 12 Ay (${R12_RANGE})`, shortName:'Son 12 Ay', pointLabels:ROLLING_LABELS, values:roll, color:'var(--coral)', peakIdx});
     return { series, labels: ROLLING_LABELS };
   }
@@ -740,9 +757,7 @@ window.TABS = (function(){
           ),
           heatRows.length > 0 && h(Zoomable, {title:'Kategori Sezon Takvimi', aspect:'wide'},
             h('div',{style:{minWidth:720}},
-              viewMode === 'calendar'
-                ? h(Heatmap,{rows:heatRows, year:2025, showYoY:true})
-                : h(Heatmap,{rows:heatRows, monthsLabels:ROLLING_LABELS, periodLabel:'Son 12 Ay', prevLabel:'Önceki 12 Ay', showYoY:true})
+              h(Heatmap,{rows:heatRows, ...heatmapLabelProps(viewMode), showYoY:true})
             )
           )
         ),
@@ -750,9 +765,7 @@ window.TABS = (function(){
           h('div',{style:{minWidth:720}},
             heatRows.length > 0 ? h(Heatmap,{
               rows:heatRows,
-              ...(viewMode === 'calendar'
-                ? {year:2025}
-                : {monthsLabels:ROLLING_LABELS, periodLabel:'Son 12 Ay', prevLabel:'Önceki 12 Ay'}),
+              ...heatmapLabelProps(viewMode),
               showYoY:true, onClickCell:(r,i)=>{
               if (r.ctx.k3) onNavigateKw({k1:r.ctx.k1, k2:r.ctx.k2, k3:r.ctx.k3});
               else if (r.ctx.k2) onNavigateKw({k1:r.ctx.k1, k2:r.ctx.k2});
@@ -1289,9 +1302,7 @@ window.TABS = (function(){
                 };
               }),
               showValues: true, showYoY: true,
-              ...(viewMode === 'calendar'
-                ? {year: 2025}
-                : {monthsLabels: ROLLING_LABELS, periodLabel:'Son 12 Ay', prevLabel:'Önceki 12 Ay'}),
+              ...heatmapLabelProps(viewMode),
             }) : h('div',{className:'empty'}, 'Sonuç yok')
           )
         ),
@@ -3160,8 +3171,8 @@ window.TABS = (function(){
           viewMode === 'calendar'
             ? h(LineChart,{
                 series:[
-                  kw.m24 && {name:'2024', shortName:'2024', pointLabels:calLabelsFor('24'), values:kw.m24, color:'color-mix(in srgb, var(--ink-3) 55%, transparent)'},
-                  kw.m25 && {name:'2025', shortName:'2025', pointLabels:calLabelsFor('25'), values:kw.m25, color:'color-mix(in srgb, var(--ink-3) 90%, transparent)'},
+                  kw.m24 && {name:'2024', shortName:'2024', pointLabels:calLabelsFor('24'), values:kw.m24, color:'color-mix(in srgb, var(--ink-3) 55%, transparent)', dashed:true, overlay:true},
+                  kw.m25 && {name:'2025', shortName:'2025', pointLabels:calLabelsFor('25'), values:kw.m25, color:'color-mix(in srgb, var(--ink-3) 90%, transparent)', dashed:true, overlay:true},
                   m26pad && {name:'2026', shortName:'2026', pointLabels:calLabelsFor('26'), values:m26pad, color:'#FF7B52'}
                 ].filter(Boolean),
                 labels: TR_MONTHS,
@@ -3169,7 +3180,7 @@ window.TABS = (function(){
               })
             : h(LineChart,{
                 series:[
-                  prevRoll && {name:`Önceki 12 Ay (${P12_RANGE})`, shortName:'Önceki 12 Ay', pointLabels:P12_LABELS, values:prevRoll, color:'#8A8A8A'},
+                  prevRoll && {name:`Önceki 12 Ay (${P12_RANGE})`, shortName:'Önceki 12 Ay', pointLabels:P12_LABELS, values:prevRoll, color:'#8A8A8A', dashed:true, overlay:true},
                   {name:`Son 12 Ay (${R12_RANGE})`, shortName:'Son 12 Ay', pointLabels:ROLLING_LABELS, values:roll, color:'#FF7B52', peakIdx}
                 ].filter(Boolean),
                 labels: ROLLING_LABELS,
