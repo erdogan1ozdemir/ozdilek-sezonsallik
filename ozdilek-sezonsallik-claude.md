@@ -39,3 +39,10 @@
 ### Üçüncü tur (aynı gün)
 
 - **Tweaks butonu topbar'dan kaldırıldı** (app.jsx): ön yüzde görünmesine gerek yok. Panel kodu (`.tweaks-panel`, tema/palet seçicileri) duruyor ve edit mode entegrasyonu (`__activate_edit_mode` postMessage) üzerinden hâlâ açılabiliyor. Topbar'da Paylaş + tema (Dark/Light) düğmeleri kaldı; tema toggle'ı doğrulandı.
+
+### Dördüncü tur (aynı gün) — okunurluk
+
+- **"Canlıda farklı görünüyor" bulgusu:** Local/canlı farkı değil, **viewport genişliği** farkıydı. Kategoriler line chart'ı `maxWidth: 1000px` + `height: 200` ile sınırlıydı; 1920px ekranda kart büyürken grafik 1000px'te sabit kalıp etrafında geniş boşluk bırakıyordu (önceki ekran görüntülerim ~800-1300px viewport'ta alındığı için sorun görünmüyordu). maxWidth kaldırıldı (kart genişliğinin tamamı) ve height 200 → 340.
+- **Punto artışı (+1):** 15px ve altındaki tüm metinler 1 punto büyütüldü — styles.css 123, tabs.jsx 127, components.jsx 33 değer. Kapsam: tablolar, chart eksen/tick etiketleri, tooltip'ler, pill/rozet, KPI etiketleri, legend, matris hücreleri, heatmap hücreleri. Başlıklar (h1/h2/h3, `.sh-title`, KPI display sayıları, hero değeri — hepsi >15px) ve topbar marka başlığı/eyebrow'u (elle geri alındı) dokunulmadı.
+- **LineChart pad ayarı:** Yazılar büyüyünce eksenin sağ ucundaki son ay etiketi ("Haz 26") viewBox dışına taşıyordu; `pad.r` 16 → 28, `pad.l` 48 → 52, `pad.b` 28 → 30.
+- **Doğrulama:** 1920/1600/375px viewport'larda yatay taşma yok; heatmap (108), matris (6.413) ve pill (882) hücrelerinin hiçbirinde metin taşması yok; `npm test` 20/20; console hatasız.

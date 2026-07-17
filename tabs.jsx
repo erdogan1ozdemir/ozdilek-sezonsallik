@@ -442,7 +442,7 @@ window.TABS = (function(){
             )
           )
         ),
-          h('p',{className:'tip-row', style:{marginTop:12,paddingTop:12,borderTop:'1px solid var(--line)',color:'var(--ink-3)',fontSize:12, display:'flex', alignItems:'flex-start', gap:8}},
+          h('p',{className:'tip-row', style:{marginTop:12,paddingTop:12,borderTop:'1px solid var(--line)',color:'var(--ink-3)',fontSize:13, display:'flex', alignItems:'flex-start', gap:8}},
           h('span',{className:'tip-icon'}, I.Bulb(14)),
           h('span',null, h('strong',null,'İpucu: '), 'Grafik başlıklarının yanındaki "?" ikonlarına mouse ile gelindiğinde o grafiğin ne anlattığı ve nasıl okunacağı görülebilir. Grafik çubuklarına / dilimlerine tıklandığında ilgili keyword listesine filtreli şekilde inilebilir.')
         )
@@ -484,7 +484,7 @@ window.TABS = (function(){
         h('div',{className:'hk-right'},
           h('div',{className:'hk-peak-label'}, 'Peak Ay'),
           h('div',{className:'hk-peak'}, rollingLongLabel(f_PEAK_IDX)),
-          h('div',{style:{fontSize:11,color:'var(--ink-3)',marginTop:2}}, fmtFull(f_MONTHLY_R12[f_PEAK_IDX]), ' arama')
+          h('div',{style:{fontSize:12,color:'var(--ink-3)',marginTop:2}}, fmtFull(f_MONTHLY_R12[f_PEAK_IDX]), ' arama')
         )
       ),
 
@@ -523,7 +523,7 @@ window.TABS = (function(){
         h('div',{className:'kpi-mini'},
           h('div',{className:'km-label'},'Fiyat Intent'),
           h('div',{className:'km-value'}, fmtNum(f_PRICE_TOTAL)),
-          h('div',{className:'km-sub'}, h('span',{className:'pill '+trendClass(f_PRICE_YOY),style:{fontSize:10,padding:'1px 5px'}}, fmtPct(f_PRICE_YOY)), `${f_PRICE.length} KW`),
+          h('div',{className:'km-sub'}, h('span',{className:'pill '+trendClass(f_PRICE_YOY),style:{fontSize:11,padding:'1px 5px'}}, fmtPct(f_PRICE_YOY)), `${f_PRICE.length} KW`),
           h(InfoIcon,{className:'kpi-info', title:'Fiyat Intent'},
             h('strong',null,'Ne? '),'İçinde "fiyat/fiyatı/ucuz/kaç para" geçen keywordlerin toplam hacmi. Satın alma niyeti göstergesi.'
           )
@@ -706,10 +706,10 @@ window.TABS = (function(){
                   h('div',{className:'swatch', style:{background: swatchColor, flexShrink:0}}),
                   h('div',{style:{minWidth:0, overflow:'hidden'}},
                     h('div',{style:{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}, k.label),
-                    k.sub && h('div',{className:'txt-3', style:{fontSize:9.5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}, k.sub)
+                    k.sub && h('div',{className:'txt-3', style:{fontSize:10.5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}, k.sub)
                   )
                 ),
-                h('span',{className:'txt-3', style:{fontSize:11, flexShrink:0, marginLeft:8}}, (share*100).toFixed(1).replace('.',',')+'%')
+                h('span',{className:'txt-3', style:{fontSize:12, flexShrink:0, marginLeft:8}}, (share*100).toFixed(1).replace('.',',')+'%')
               );
             })
           )
@@ -780,7 +780,7 @@ window.TABS = (function(){
               })
           )
         ),
-        h('div',{className:'txt-3',style:{fontSize:11,marginTop:10}},
+        h('div',{className:'txt-3',style:{fontSize:12,marginTop:10}},
           'Her hücrede ', h('strong',null,'üst:'), viewMode === 'calendar' ? ' 2025 arama hacmi, ' : ' Son 12 Ay arama hacmi, ', h('strong',null,'alt rozet:'), viewMode === 'calendar' ? ' 2024\'e kıyasla ' : ' önceki 12 aylık dönemin aynı ayına kıyasla ', h('strong',null,'YoY%'),' değişim. ',
           'Renk: ', h('span',{style:{color:'#e67c73'}},'kırmızı (dip) '), '& ',
           h('span',{style:{color:'#fbbc04'}},'sarı (orta) '), '& ',
@@ -831,7 +831,7 @@ window.TABS = (function(){
                 h('br'),h('br'),h('strong',null,'Drill-down: '),'Global filtreden Kat 1 seç → Kat 2 kolonları gelir. Kat 2 seç → Kat 3 kolonları. Marka ismi tıkla → filter.'
               )
             ),
-            h('span',{className:'txt-3', style:{fontSize:11}}, brands.length + ' marka × ' + colList.length + ' kolon'),
+            h('span',{className:'txt-3', style:{fontSize:12}}, brands.length + ' marka × ' + colList.length + ' kolon'),
             h(CopyButton, {getData: copyData})
           ),
           h('div',{className:'bkm-scroll', style:{overflow:'auto', padding:'0 14px 14px', position:'relative', maxHeight: 520}},
@@ -840,29 +840,29 @@ window.TABS = (function(){
               gridTemplateColumns: `minmax(160px, 200px) repeat(${colList.length}, minmax(70px, 1fr)) minmax(80px, 100px)`,
               gap:2, minWidth: (160 + colList.length*70 + 80) + 'px'
             }},
-              h('div',{style:{padding:'8px 6px', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, 'Marka'),
+              h('div',{style:{padding:'8px 6px', fontSize:11, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, 'Marka'),
               ...colList.map(col => h('div',{
                 key:'h'+col,
                 style:{
-                  padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'center',
+                  padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'center',
                   borderBottom:`2px solid ${katColor(colParentK1[col] || col)}`, color:'var(--ink-2)',
                   lineHeight:1.15, wordBreak:'break-word',
                   position:'sticky', top:0, background:'var(--bg-card)', zIndex:2
                 }, title:col
               }, col)),
-              h('div',{style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam Avg'),
+              h('div',{style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam Avg'),
               ...brands.flatMap((r, ri) => [
                 h('div',{
                   key:'b'+ri,
                   style:{
-                    padding:'6px 8px', fontSize:12, fontWeight:600, cursor:'pointer',
+                    padding:'6px 8px', fontSize:13, fontWeight:600, cursor:'pointer',
                     display:'flex', alignItems:'center', gap:6, minWidth:0,
                     borderTop: ri>0 ? '1px solid var(--line)' : 'none',
                     position:'sticky', left:0, background:'var(--bg-card)', zIndex:1
                   },
                   onClick: () => globalFilter?.setGlobalBrand && globalFilter.setGlobalBrand([r.brand])
                 },
-                  h('span',{style:{color:'var(--ink-3)',fontSize:10,fontWeight:500,flexShrink:0,minWidth:16}}, (ri+1)+'.'),
+                  h('span',{style:{color:'var(--ink-3)',fontSize:11,fontWeight:500,flexShrink:0,minWidth:16}}, (ri+1)+'.'),
                   h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}, title:r.brand}, r.brand)
                 ),
                 ...colList.map((col, ci) => {
@@ -876,7 +876,7 @@ window.TABS = (function(){
                   return h('div',{
                     key:'c'+ri+'_'+ci,
                     style:{
-                      padding:'8px 4px', fontSize:10, fontWeight:600, textAlign:'center',
+                      padding:'8px 4px', fontSize:11, fontWeight:600, textAlign:'center',
                       background: bg, color: txtColor, borderRadius:3,
                       borderTop: ri>0 ? '1px solid var(--line)' : 'none',
                       minHeight:28, display:'flex', alignItems:'center', justifyContent:'center'
@@ -886,7 +886,7 @@ window.TABS = (function(){
                 h('div',{
                   key:'t'+ri,
                   style:{
-                    padding:'8px 6px', fontSize:11, fontWeight:700, textAlign:'right',
+                    padding:'8px 6px', fontSize:12, fontWeight:700, textAlign:'right',
                     color:'var(--ink)', borderTop: ri>0 ? '1px solid var(--line)' : 'none'
                   },
                   title: fmtFull(toMonthlyAvg(r.total))
@@ -1010,10 +1010,10 @@ window.TABS = (function(){
               else if (c.k2) onNavigateKw({k1:c.k1, k2:c.k2});
               else onNavigateCat(c.k1);
             }},
-              h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3,fontSize:12,gap:8}},
+              h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3,fontSize:13,gap:8}},
                 h('div',{style:{overflow:'hidden'}},
                   h('span',{style:{fontWeight:500}}, q.label),
-                  q.sub && h('span',{className:'txt-3', style:{fontSize:10,marginLeft:6}}, q.sub)
+                  q.sub && h('span',{className:'txt-3', style:{fontSize:11,marginLeft:6}}, q.sub)
                 ),
                 h('span',{className:'pill q'+q.peakQ, style:{flexShrink:0}, title:'Son 12 ayın en yüksek hacimli çeyreği'}, qLabel(q.peakQ-1))
               ),
@@ -1056,7 +1056,7 @@ window.TABS = (function(){
             h('h3',null,'En Çok Büyüyen',
               h(InfoIcon,null,h('strong',null,'Ne? '),`Önceki 12 aydan (${P12_RANGE}) son 12 aya (${R12_RANGE}) mutlak hacim artışı en yüksek kelimeler. % değil, toplam arama sayısında artış.`)
             ),
-            h('span',{className:'hint pill pos', style:{fontSize:10}},'↑ Kazanan')
+            h('span',{className:'hint pill pos', style:{fontSize:11}},'↑ Kazanan')
           ),
           h('table',{className:'tbl'},
             h('tbody',null,
@@ -1076,7 +1076,7 @@ window.TABS = (function(){
             h('h3',null,'En Çok Daralan',
               h(InfoIcon,null,h('strong',null,'Ne? '),`Önceki 12 aydan (${P12_RANGE}) son 12 aya (${R12_RANGE}) mutlak hacim düşüşü en yüksek kelimeler. Büyük hacimli kelimelerde küçük % bile büyük düşüş demek.`)
             ),
-            h('span',{className:'hint pill neg', style:{fontSize:10}},'↓ Kaybeden')
+            h('span',{className:'hint pill neg', style:{fontSize:11}},'↓ Kaybeden')
           ),
           h('table',{className:'tbl'},
             h('tbody',null,
@@ -1205,20 +1205,20 @@ window.TABS = (function(){
             + ' · ' + (viewMode==='calendar' ? '2024-2026' : 'Son vs Önceki 12 Ay')
           )
         ),
-        h('div',{style:{display:'flex',justifyContent:'center',width:'100%'}},
-          h('div',{style:{width:'100%',maxWidth:1000}},
-            multiLineSeries
-              ? h(LineChart,{ series: multiLineSeries, labels: viewMode==='calendar' ? TR_MONTHS : ROLLING_LABELS, legend:true, height:200 })
-              : (() => {
-                  const { series, labels } = lineSeriesFor(viewMode, {
-                    m24: line24, m25: line25, m26: line26,
-                    roll: lineR12, prev: lineP12, peakIdx: linePeak
-                  });
-                  return h(LineChart,{ series, labels, legend:true, height:200 });
-                })()
-          )
+        // Kart genişliğinin tamamı kullanılır; geniş ekranda sabit maxWidth grafiği
+        // küçük bırakıp etrafında boşluk oluşturuyordu.
+        h('div',{style:{width:'100%'}},
+          multiLineSeries
+            ? h(LineChart,{ series: multiLineSeries, labels: viewMode==='calendar' ? TR_MONTHS : ROLLING_LABELS, legend:true, height:340 })
+            : (() => {
+                const { series, labels } = lineSeriesFor(viewMode, {
+                  m24: line24, m25: line25, m26: line26,
+                  roll: lineR12, prev: lineP12, peakIdx: linePeak
+                });
+                return h(LineChart,{ series, labels, legend:true, height:340 });
+              })()
         ),
-        h('div',{style:{display:'flex',gap:20,marginTop:10,flexWrap:'wrap',fontSize:12,color:'var(--ink-2)'}},
+        h('div',{style:{display:'flex',gap:20,marginTop:10,flexWrap:'wrap',fontSize:13,color:'var(--ink-2)'}},
           h('div',null, 'Toplam Son 12 Ay: ', h('strong',{className:'num'}, fmtNum(lineTotalR12))),
           !multiLineSeries && h('div',null, 'YoY: ', h(YoYPill, {yoy: lineYoY, type:'YoY'})),
           h('div',null, 'Peak ay: ', h('strong',null, rollingLongLabel(linePeak)))
@@ -1306,7 +1306,7 @@ window.TABS = (function(){
             }) : h('div',{className:'empty'}, 'Sonuç yok')
           )
         ),
-        h('div',{className:'txt-3',style:{fontSize:11,marginTop:10}},
+        h('div',{className:'txt-3',style:{fontSize:12,marginTop:10}},
           'Her hücrede ', h('strong',null,'üst:'), viewMode === 'calendar' ? ' 2025 arama hacmi, ' : ' Son 12 Ay arama hacmi, ', h('strong',null,'alt rozet:'), viewMode === 'calendar' ? ' 2024\'e kıyasla ' : ' önceki 12 aylık dönemin aynı ayına kıyasla ', h('strong',null,'YoY%'),' değişim. ',
           'Renk: ', h('span',{style:{color:'#e67c73'}},'kırmızı (dip) '), '& ',
           h('span',{style:{color:'#fbbc04'}},'sarı (orta) '), '& ',
@@ -1350,7 +1350,7 @@ window.TABS = (function(){
                         // Mobilde gizlenmiş metrikler buraya meta-satır olarak düşer
                         h('div',{className:'kw-mobile-meta'},
                           h('span',null, fmtNum(roll[peakIdx]), ' · ', ROLLING_LABELS[peakIdx]),
-                          peakQIdx>=0 && h('span',{className:'pill q'+(peakQIdx+1), style:{fontSize:9, padding:'1px 5px', marginLeft:6}}, qLabel(peakQIdx))
+                          peakQIdx>=0 && h('span',{className:'pill q'+(peakQIdx+1), style:{fontSize:10, padding:'1px 5px', marginLeft:6}}, qLabel(peakQIdx))
                         )
                       )
                     )
@@ -1360,7 +1360,7 @@ window.TABS = (function(){
                   h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
                   h('td',{className:'col-hide-sm', style:{width:110}}, h(Sparkline,{values:roll, w:100, h:28})),
                   h('td',{className:'col-hide-sm'}, peakQIdx>=0 ? h('span',{className:'pill q'+(peakQIdx+1), title:'Son 12 ayın en yüksek hacimli çeyreği'}, qLabel(peakQIdx)) : '-'),
-                  h('td',{className:'col-hide-sm', style:{fontSize:12,color:'var(--ink-2)'}}, ROLLING_LABELS[peakIdx]+' · '+fmtNum(roll[peakIdx]))
+                  h('td',{className:'col-hide-sm', style:{fontSize:13,color:'var(--ink-2)'}}, ROLLING_LABELS[peakIdx]+' · '+fmtNum(roll[peakIdx]))
                 );
               })
             )
@@ -1430,7 +1430,7 @@ window.TABS = (function(){
       // Sadece keyword arama + CopyButton + CSV export — diğer filtreler üst globalde
       h('div',{className:'toolbar'},
         h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:200}}),
-        h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
+        h('span',{className:'txt-3', style:{fontSize:13}}, fmtNum(filtered.length)+' keyword'),
         h(CopyButton, {
           getData: () => ({
             headers: ['Keyword','Marka','Kat 1','Kat 2','Kat 3','Önceki 12 Ay Ort','Son 12 Ay Ort','YoY %','Bucket','Peak Ay','Peak Çeyrek'],
@@ -1492,14 +1492,14 @@ window.TABS = (function(){
                 const peakQ = peakQuarterIdx(roll) + 1;
                 return h('tr',{key:page*perPage+i, className:'clickable', onClick:()=>setKeywordModal(r)},
                   h('td',{className:'kw-cell', style:{maxWidth:220}}, r.kw),
-                  h('td',{style:{fontSize:11}},
+                  h('td',{style:{fontSize:12}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
                       h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(r.k1),flexShrink:0}}),
                       h('span',null, r.k1)
                     )
                   ),
-                  h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
-                  h('td',{style:{fontSize:11,color:'var(--ink-3)'}}, r.k3),
+                  h('td',{style:{fontSize:12,color:'var(--ink-2)'}}, r.k2),
+                  h('td',{style:{fontSize:12,color:'var(--ink-3)'}}, r.k3),
                   h('td',{className:'num'}, fmtFull(r.p12)),
                   h('td',{className:'num'}, fmtFull(r.r12)),
                   h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
@@ -1514,7 +1514,7 @@ window.TABS = (function(){
         ),
         totalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Önceki'),
-          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages}`),
+          h('span',{style:{padding:'6px 12px',fontSize:13,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages}`),
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1, p+1))}, 'Sonraki →')
         )
       )
@@ -1652,7 +1652,7 @@ window.TABS = (function(){
                     h('br'),h('br'),h('strong',null,'Ne için? '),'"Birden patlayan" sorguları öne çıkarır. Pazarda oluşan yeni bir ihtiyaç ya da kampanya/ürün dalgasına işaret edebilir - içerik stratejisi için hızlı fırsat kanalı.'
                   )
                 ),
-                h('div',{className:'txt-3', style:{fontSize:11, marginTop:2}}, stars.length, ' outlier · en yüksek ', h('strong',{style:{color:'var(--coral-deep)'}}, '+', fmtPct(topYoY, 0).replace('+','')))
+                h('div',{className:'txt-3', style:{fontSize:12, marginTop:2}}, stars.length, ' outlier · en yüksek ', h('strong',{style:{color:'var(--coral-deep)'}}, '+', fmtPct(topYoY, 0).replace('+','')))
               )
             ),
             h('span',{className:'hint'}, 'YoY ≥ +100% · min 100/ay')
@@ -1716,7 +1716,7 @@ window.TABS = (function(){
                 top.map((r,i) => h('tr',{key:i, className:'clickable', onClick:()=>setKeywordModal(r)},
                   h('td',null, h('span',{className:'txt-3 num'}, (i+1))),
                   h('td',{className:'kw-cell'}, r.kw),
-                  h('td',{style:{fontSize:11,color:'var(--ink-3)'}},
+                  h('td',{style:{fontSize:12,color:'var(--ink-3)'}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
                       h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(r.k1),flexShrink:0}}),
                       h('span',null, r.k1 + (r.k2 ? ' > ' + r.k2 : ''))
@@ -1787,10 +1787,10 @@ window.TABS = (function(){
           perCat.map(k => {
             const navTo = (trend) => onNavigateKw({k1:k.k1, k2:k.k2, k3:k.k3, trend});
             return h('div',{key:k.label + (k.sub || '')},
-              h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12,gap:8,flexWrap:'wrap'}},
+              h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:13,gap:8,flexWrap:'wrap'}},
                 h('div',{style:{minWidth:0}},
                   h('span',{style:{fontWeight:600}}, k.label),
-                  k.sub && h('span',{className:'txt-3',style:{fontSize:10,marginLeft:6}}, k.sub),
+                  k.sub && h('span',{className:'txt-3',style:{fontSize:11,marginLeft:6}}, k.sub),
                   h('span',{className:'txt-3',style:{marginLeft:8}}, fmtFull(k.total)+' KW')
                 ),
                 h('div',{style:{display:'flex',gap:4,alignItems:'center',flexShrink:0,flexWrap:'wrap'}},
@@ -1914,8 +1914,8 @@ window.TABS = (function(){
                   const brand = full?.brand || '';
                   return h('tr',{key:i, className:'clickable', onClick:()=>full && setKeywordModal(full)},
                     h('td',{className:'kw-cell'}, r.kw),
-                    h('td',{style:{fontSize:11, fontWeight: brand ? 500 : 400, color: brand ? 'var(--ink)' : 'var(--ink-3)'}}, brand || '—'),
-                    h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k1),
+                    h('td',{style:{fontSize:12, fontWeight: brand ? 500 : 400, color: brand ? 'var(--ink)' : 'var(--ink-3)'}}, brand || '—'),
+                    h('td',{style:{fontSize:12,color:'var(--ink-2)'}}, r.k1),
                     h('td',{className:'num', title: fmtFull(r.last)}, fmtNum(r.last)),
                     h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
                     h('td',null, r.peakMonth ? h('span',{className:'pill neu'}, serialToRollingLabel(r.peakMonth)) : '-')
@@ -2242,14 +2242,14 @@ window.TABS = (function(){
                   }
                 },
                   h('div',{style:{display:'flex',alignItems:'center',gap:8}},
-                    h('span',{style:{fontSize:11, color:'var(--ink-3)', fontWeight:500, minWidth:14}}, (i+1)+'.'),
-                    h('strong',{style:{flex:1, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, b.brand),
+                    h('span',{style:{fontSize:12, color:'var(--ink-3)', fontWeight:500, minWidth:14}}, (i+1)+'.'),
+                    h('strong',{style:{flex:1, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, b.brand),
                     h('span',{
                       className:'pill ' + (b.ryoy > 0 ? 'pos' : 'neg'),
-                      style:{fontSize:11, fontWeight:700, padding:'2px 7px'}
+                      style:{fontSize:12, fontWeight:700, padding:'2px 7px'}
                     }, (b.ryoy > 0 ? '↑ +' : '↓ ') + fmtPct(b.ryoy, 0).replace(/[+-]/,''))
                   ),
-                  h('div',{style:{display:'flex',alignItems:'center',gap:10,fontSize:11,color:'var(--ink-3)', flexWrap:'wrap'}},
+                  h('div',{style:{display:'flex',alignItems:'center',gap:10,fontSize:12,color:'var(--ink-3)', flexWrap:'wrap'}},
                     h('span',{title: fmtFull(toMonthlyAvg(b.sumR12)) + ' /ay'}, fmtNum(toMonthlyAvg(b.sumR12)), ' /ay Son 12 Ay'),
                     h('span',{style:{width:3,height:3,borderRadius:'50%',background:'var(--ink-3)',opacity:.5}}),
                     h('span',null, b.count, ' KW'),
@@ -2278,7 +2278,7 @@ window.TABS = (function(){
               h('strong',null,'Ne gösterir? '),`Özdilek portföyünde bulunmayan markaların keyword sayısı, Önceki/Son 12 Ay hacmi (${P12_RANGE} / ${R12_RANGE}), YoY, peak ay ve ana kategori bilgisi.`,
               h('br'),h('br'),h('strong',null,'Nasıl kullanılır? '),'Satıra tıkla → alt kategori (Kat 2) kırılımı pivot gibi açılır. Başlıklara tıklayarak sırala. Üstten Marka filtresi ile birden fazla marka seçilebilir.'
             ),
-            h('span',{className:'txt-3', style:{fontSize:11, marginLeft:8}}, fmtNum(brandRows.length)+' marka')
+            h('span',{className:'txt-3', style:{fontSize:12, marginLeft:8}}, fmtNum(brandRows.length)+' marka')
           ),
           h('input',{
             className:'input input-search', placeholder:'Marka ara…',
@@ -2350,8 +2350,8 @@ window.TABS = (function(){
               brandRows.flatMap((b,i) => {
                 const isOpen = expandedBrands.has(b.brand);
                 const mainRow = h('tr',{key:'b'+i, className:'clickable', onClick:()=>toggleExpand(b.brand)},
-                  h('td',{style:{width:26, color:'var(--ink-3)', fontSize:10, textAlign:'center'}}, isOpen ? '▾' : '▸'),
-                  h('td',{style:{width:40, color:'var(--ink-3)', fontSize:11}}, i + 1),
+                  h('td',{style:{width:26, color:'var(--ink-3)', fontSize:11, textAlign:'center'}}, isOpen ? '▾' : '▸'),
+                  h('td',{style:{width:40, color:'var(--ink-3)', fontSize:12}}, i + 1),
                   h('td',null, h('strong',null, b.brand)),
                   h('td',{className:'num'}, fmtNum(b.count)),
                   h('td',{className:'num', title:fmtFull(toMonthlyAvg(b.sumP12))}, fmtNum(toMonthlyAvg(b.sumP12))),
@@ -2362,18 +2362,18 @@ window.TABS = (function(){
                       h(Sparkline,{values:b.rollM, w:90, h:26}),
                       (() => { const arr = recentTrendArrow(b.rollM); return arr ? h('span',{
                         title: arr.title,
-                        style:{fontSize:14, fontWeight:700, color: arr.color, lineHeight:1}
+                        style:{fontSize:15, fontWeight:700, color: arr.color, lineHeight:1}
                       }, arr.char) : null; })()
                     )
                   ),
                   h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, ROLLING_LABELS[b.peakI]) : '-'),
-                  h('td',{style:{fontSize:11}},
+                  h('td',{style:{fontSize:12}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
                       h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(b.topK1),flexShrink:0}}),
                       h('span',null, b.topK1)
                     )
                   ),
-                  h('td',{className:'num', style:{fontSize:11}}, (b.topK1Share*100).toFixed(0)+'%')
+                  h('td',{className:'num', style:{fontSize:12}}, (b.topK1Share*100).toFixed(0)+'%')
                 );
 
                 if (!isOpen) return [mainRow];
@@ -2383,12 +2383,12 @@ window.TABS = (function(){
                   h('td',{colSpan:11, style:{padding:0, background:'var(--line-soft)'}},
                     h('div',{style:{padding:'12px 16px 14px'}},
                       h('div',{style:{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:8}},
-                        h('div',{style:{fontSize:11, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
+                        h('div',{style:{fontSize:12, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
                           `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
                         ),
                         onNavigateBrand && h('button',{
                           className:'chip-btn',
-                          style:{padding:'4px 10px', borderRadius:999, fontSize:11, cursor:'pointer'},
+                          style:{padding:'4px 10px', borderRadius:999, fontSize:12, cursor:'pointer'},
                           onClick: (e) => {
                             e.stopPropagation();
                             onNavigateBrand(b.brand, b.catalog);
@@ -2414,7 +2414,7 @@ window.TABS = (function(){
                             h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sumR12))}, fmtNum(toMonthlyAvg(r.sumR12))),
                             h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
                             h('td',{style:{width:110}}, h(Sparkline,{values:r.rollM, w:100, h:26})),
-                            h('td',{style:{fontSize:11, color:'var(--ink-2)'}},
+                            h('td',{style:{fontSize:12, color:'var(--ink-2)'}},
                               r.topKws.map((k, ki) => h('span',{
                                 key:ki, className:'clickable',
                                 onClick:(e)=>{ e.stopPropagation(); setKeywordModal(k); },
@@ -2422,9 +2422,9 @@ window.TABS = (function(){
                                   display:'inline-block', marginRight:6, marginBottom:2,
                                   padding:'2px 7px', background:'var(--bg)',
                                   border:'1px solid var(--line)', borderRadius:12,
-                                  fontSize:11, cursor:'pointer'
+                                  fontSize:12, cursor:'pointer'
                                 }
-                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:10}}, fmtNum(k.r12))))
+                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:11}}, fmtNum(k.r12))))
                             )
                           ))
                         )
@@ -2437,7 +2437,7 @@ window.TABS = (function(){
             )
           )
         ),
-        h('div',{style:{padding:'8px 14px', borderTop:'1px solid var(--line)', fontSize:11, color:'var(--ink-3)', display:'flex', alignItems:'center', justifyContent:'space-between'}},
+        h('div',{style:{padding:'8px 14px', borderTop:'1px solid var(--line)', fontSize:12, color:'var(--ink-3)', display:'flex', alignItems:'center', justifyContent:'space-between'}},
           h('span',null, fmtNum(brandRows.length) + ' marka · scrollable (tek sayfa)'),
           brandRows.length > 0 && h('span',{className:'txt-3'}, 'Satıra tıkla → alt kategori kırılımı açılır')
         )
@@ -2446,7 +2446,7 @@ window.TABS = (function(){
       // Keyword table (filtrelerle sınırlı)
       h('div',{className:'toolbar'},
         h('input',{className:'input input-search', placeholder:'Keyword ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:200}}),
-        h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' keyword'),
+        h('span',{className:'txt-3', style:{fontSize:13}}, fmtNum(filtered.length)+' keyword'),
         h(CopyButton, {
           getData: () => ({
             headers: ['Keyword','Marka','Kat 1','Kat 2','Kat 3','Önceki 12 Ay Ort','Son 12 Ay Ort','YoY %','Peak Ay'],
@@ -2492,14 +2492,14 @@ window.TABS = (function(){
                 const pi = roll.length ? roll.indexOf(Math.max(...roll)) : -1;
                 return h('tr',{key:page*perPage+i, className:'clickable', onClick:()=>setKeywordModal(r)},
                   h('td',{className:'kw-cell', style:{maxWidth:200}}, r.kw),
-                  h('td',{style:{fontSize:11, fontWeight:500}}, r.brand || '-'),
-                  h('td',{style:{fontSize:11}},
+                  h('td',{style:{fontSize:12, fontWeight:500}}, r.brand || '-'),
+                  h('td',{style:{fontSize:12}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
                       h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(r.k1),flexShrink:0}}),
                       h('span',null, r.k1)
                     )
                   ),
-                  h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
+                  h('td',{style:{fontSize:12,color:'var(--ink-2)'}}, r.k2),
                   h('td',{className:'num'}, fmtNum(r.p12)),
                   h('td',{className:'num'}, fmtNum(r.r12)),
                   h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
@@ -2512,7 +2512,7 @@ window.TABS = (function(){
         ),
         totalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Önceki'),
-          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages} · ${fmtNum(filtered.length)} KW`),
+          h('span',{style:{padding:'6px 12px',fontSize:13,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages} · ${fmtNum(filtered.length)} KW`),
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1, p+1))}, 'Sonraki →')
         )
       )
@@ -2681,7 +2681,7 @@ window.TABS = (function(){
       h('div',{className:'toolbar', style:{marginBottom:14}},
         h('input',{className:'input input-search', placeholder:'Marka ara…', value:q, onChange:e=>setQ(e.target.value), style:{flex:1, minWidth:220}}),
         h('div',{style:{flex:1}}),
-        h('span',{className:'txt-3', style:{fontSize:12}}, fmtNum(filtered.length)+' marka'),
+        h('span',{className:'txt-3', style:{fontSize:13}}, fmtNum(filtered.length)+' marka'),
         h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, onClick:()=>{
           const csv = toCSV(filtered, [
             {label:'Marka',key:'brand'}, {label:'Katalog',key:'catalog'},
@@ -2794,7 +2794,7 @@ window.TABS = (function(){
                 h('br'),h('br'),h('strong',null,'Filtre: '),'Üstte global (Kat 1/2/3/Marka/Peak Ay/Trend...) + toolbar\'da tab-level arama + katalog segmented.',
                 h('br'),h('br'),h('strong',null,'Sort: '),'Kolon başlıklarına tıkla. Satır tıkla → keyword modal.'
               ),
-              h('span',{className:'txt-3', style:{fontSize:11, marginLeft:8}}, fmtNum(rows.length)+' keyword')
+              h('span',{className:'txt-3', style:{fontSize:12, marginLeft:8}}, fmtNum(rows.length)+' keyword')
             ),
             h('input',{
               className:'input input-search', placeholder:'Keyword veya marka ara…',
@@ -2837,15 +2837,15 @@ window.TABS = (function(){
                   const pi = roll.length ? roll.indexOf(Math.max(...roll)) : -1;
                   return h('tr',{key:brandKwPage*perK+i, className:'clickable', onClick:()=>setKeywordModal(r)},
                     h('td',{className:'kw-cell', style:{maxWidth:200}}, r.kw),
-                    h('td',{style:{fontSize:11, fontWeight:500}}, r.brand || '-'),
-                    h('td',null, h('span',{className:'pill '+(r.catalog==='Var'?'pos':r.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, r.catalog || '-')),
-                    h('td',{style:{fontSize:11}},
+                    h('td',{style:{fontSize:12, fontWeight:500}}, r.brand || '-'),
+                    h('td',null, h('span',{className:'pill '+(r.catalog==='Var'?'pos':r.catalog==='Yok'?'neg':'neu'), style:{fontSize:11}}, r.catalog || '-')),
+                    h('td',{style:{fontSize:12}},
                       h('div',{style:{display:'flex',alignItems:'center',gap:5}},
                         h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(r.k1),flexShrink:0}}),
                         h('span',null, r.k1)
                       )
                     ),
-                    h('td',{style:{fontSize:11,color:'var(--ink-2)'}}, r.k2),
+                    h('td',{style:{fontSize:12,color:'var(--ink-2)'}}, r.k2),
                     h('td',{className:'num', title:fmtFull(r.p12)}, fmtNum(r.p12)),
                     h('td',{className:'num', title:fmtFull(r.r12)}, fmtNum(r.r12)),
                     h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
@@ -2858,7 +2858,7 @@ window.TABS = (function(){
           ),
           kwTotalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
             h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:brandKwPage===0, onClick:()=>setBrandKwPage(p=>Math.max(0,p-1))}, '← Önceki'),
-            h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${brandKwPage+1}/${kwTotalPages} · ${fmtNum(rows.length)} KW`),
+            h('span',{style:{padding:'6px 12px',fontSize:13,color:'var(--ink-2)'}}, `Sayfa ${brandKwPage+1}/${kwTotalPages} · ${fmtNum(rows.length)} KW`),
             h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:brandKwPage>=kwTotalPages-1, onClick:()=>setBrandKwPage(p=>Math.min(kwTotalPages-1, p+1))}, 'Sonraki →')
           )
         );
@@ -2925,7 +2925,7 @@ window.TABS = (function(){
                 h('br'),h('br'),h('strong',null,'Scroll: '),'Yatay (kolonlar) ve dikey (markalar) scroll mevcut. İlk kolon yatay scroll\'da sabit.'
               )
             ),
-            h('span',{className:'txt-3', style:{fontSize:11}}, brands.length + ' marka × ' + colList.length + ' kolon'),
+            h('span',{className:'txt-3', style:{fontSize:12}}, brands.length + ' marka × ' + colList.length + ' kolon'),
             h(CopyButton, {getData: copyData})
           ),
           h('div',{className:'bkm-scroll', style:{overflow:'auto', padding:'0 14px 14px', position:'relative', maxHeight: 520}},
@@ -2935,18 +2935,18 @@ window.TABS = (function(){
               gap:2, minWidth: (160 + colList.length*70 + 80) + 'px'
             }},
               // Header row — first column sticky
-              h('div',{style:{padding:'8px 6px', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, 'Marka'),
+              h('div',{style:{padding:'8px 6px', fontSize:11, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, 'Marka'),
               ...colList.map(col => h('div',{
                 key:'h'+col,
                 style:{
-                  padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'center',
+                  padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'center',
                   borderBottom:`2px solid ${katColor(colParentK1[col] || col)}`, color:'var(--ink-2)',
                   lineHeight:1.15, wordBreak:'break-word',
                   position:'sticky', top:0, background:'var(--bg-card)', zIndex:2
                 },
                 title: col
               }, col)),
-              h('div',{style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam Avg'),
+              h('div',{style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam Avg'),
               // Body
               ...brands.flatMap((r, ri) => [
                 h('div',{
@@ -2958,15 +2958,15 @@ window.TABS = (function(){
                   },
                   title: `${r.brand} markasını filtreye ekle ve keyword listesine scroll`,
                   style:{
-                    padding:'6px 8px', fontSize:12, fontWeight:600, cursor:'pointer',
+                    padding:'6px 8px', fontSize:13, fontWeight:600, cursor:'pointer',
                     display:'flex', alignItems:'center', gap:6, minWidth:0,
                     borderTop: ri>0 ? '1px solid var(--line)' : 'none',
                     position:'sticky', left:0, background:'var(--bg-card)', zIndex:1
                   }
                 },
-                  h('span',{style:{color:'var(--ink-3)',fontSize:10,fontWeight:500,flexShrink:0,minWidth:16}}, (ri+1)+'.'),
+                  h('span',{style:{color:'var(--ink-3)',fontSize:11,fontWeight:500,flexShrink:0,minWidth:16}}, (ri+1)+'.'),
                   h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,minWidth:0}, title:r.brand}, r.brand),
-                  h('span',{className:'pill '+(r.catalog==='Var'?'pos':r.catalog==='Yok'?'neg':'neu'), style:{fontSize:9, padding:'1px 5px'}}, r.catalog || '-')
+                  h('span',{className:'pill '+(r.catalog==='Var'?'pos':r.catalog==='Yok'?'neg':'neu'), style:{fontSize:10, padding:'1px 5px'}}, r.catalog || '-')
                 ),
                 ...colList.map((col, ci) => {
                   const v = r.cells[col] || 0;
@@ -2989,7 +2989,7 @@ window.TABS = (function(){
                       setTimeout(() => scrollAndFlash(kwListRef), 80);
                     },
                     style:{
-                      padding:'8px 4px', fontSize:10, fontWeight:600, textAlign:'center',
+                      padding:'8px 4px', fontSize:11, fontWeight:600, textAlign:'center',
                       background: bg, color: txtColor, borderRadius:3,
                       borderTop: ri>0 ? '1px solid var(--line)' : 'none',
                       minHeight:28, display:'flex', alignItems:'center', justifyContent:'center',
@@ -3001,7 +3001,7 @@ window.TABS = (function(){
                 h('div',{
                   key:'t'+ri,
                   style:{
-                    padding:'8px 6px', fontSize:11, fontWeight:700, textAlign:'right',
+                    padding:'8px 6px', fontSize:12, fontWeight:700, textAlign:'right',
                     color:'var(--ink)', borderTop: ri>0 ? '1px solid var(--line)' : 'none'
                   },
                   title: fmtFull(toMonthlyAvg(r.total)) + ' /ay'
@@ -3033,9 +3033,9 @@ window.TABS = (function(){
               pageRows.flatMap((b,i) => {
                 const isOpen = expandedBrands.has(b.brand);
                 const mainRow = h('tr',{key:'b'+i, className:'clickable', onClick:()=>toggleExpand(b.brand)},
-                  h('td',{style:{width:26, color:'var(--ink-3)', fontSize:10, textAlign:'center'}}, isOpen ? '▾' : '▸'),
+                  h('td',{style:{width:26, color:'var(--ink-3)', fontSize:11, textAlign:'center'}}, isOpen ? '▾' : '▸'),
                   h('td',null, h('strong',null, b.brand)),
-                  h('td',null, h('span',{className:'pill '+(b.catalog==='Var'?'pos':b.catalog==='Yok'?'neg':'neu'), style:{fontSize:10}}, b.catalog || '-')),
+                  h('td',null, h('span',{className:'pill '+(b.catalog==='Var'?'pos':b.catalog==='Yok'?'neg':'neu'), style:{fontSize:11}}, b.catalog || '-')),
                   h('td',{className:'num'}, fmtNum(b.count)),
                   h('td',{className:'num', title: fmtFull(toMonthlyAvg(b.sumP12))}, fmtNum(toMonthlyAvg(b.sumP12))),
                   h('td',{className:'num', title: fmtFull(toMonthlyAvg(b.sumR12))}, fmtNum(toMonthlyAvg(b.sumR12))),
@@ -3045,12 +3045,12 @@ window.TABS = (function(){
                       h(Sparkline,{values:b.rollM, w:90, h:26}),
                       (() => { const arr = recentTrendArrow(b.rollM); return arr ? h('span',{
                         title: arr.title,
-                        style:{fontSize:14, fontWeight:700, color: arr.color, lineHeight:1}
+                        style:{fontSize:15, fontWeight:700, color: arr.color, lineHeight:1}
                       }, arr.char) : null; })()
                     )
                   ),
                   h('td',null, b.peakI >= 0 ? h('span',{className:'pill neu'}, ROLLING_LABELS[b.peakI]) : '-'),
-                  h('td',{style:{fontSize:11}},
+                  h('td',{style:{fontSize:12}},
                     h('div',{style:{display:'flex',alignItems:'center',gap:5}},
                       h('div',{style:{width:7,height:7,borderRadius:2,background:katColor(b.topK1),flexShrink:0}}),
                       h('span',null, b.topK1)
@@ -3064,12 +3064,12 @@ window.TABS = (function(){
                   h('td',{colSpan:10, style:{padding:0, background:'var(--line-soft)'}},
                     h('div',{style:{padding:'12px 16px 14px'}},
                       h('div',{style:{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:8}},
-                        h('div',{style:{fontSize:11, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
+                        h('div',{style:{fontSize:12, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700}},
                           `${b.brand} · Alt Kategori Kırılımı (${b.k2Rows.length} Kat 2)`
                         ),
                         onNavigateBrand && h('button',{
                           className:'chip-btn',
-                          style:{padding:'4px 10px', borderRadius:999, fontSize:11, cursor:'pointer'},
+                          style:{padding:'4px 10px', borderRadius:999, fontSize:12, cursor:'pointer'},
                           onClick: (e) => {
                             e.stopPropagation();
                             onNavigateBrand(b.brand, b.catalog);
@@ -3095,7 +3095,7 @@ window.TABS = (function(){
                             h('td',{className:'num', title: fmtFull(toMonthlyAvg(r.sumR12))}, fmtNum(toMonthlyAvg(r.sumR12))),
                             h('td',{className:'num'}, h(YoYPill,{yoy:r.ryoy})),
                             h('td',{style:{width:110}}, h(Sparkline,{values:r.rollM, w:100, h:26})),
-                            h('td',{style:{fontSize:11, color:'var(--ink-2)'}},
+                            h('td',{style:{fontSize:12, color:'var(--ink-2)'}},
                               r.topKws.map((k, ki) => h('span',{
                                 key:ki, className:'clickable',
                                 onClick:(e)=>{ e.stopPropagation(); setKeywordModal(k); },
@@ -3103,9 +3103,9 @@ window.TABS = (function(){
                                   display:'inline-block', marginRight:6, marginBottom:2,
                                   padding:'2px 7px', background:'var(--bg)',
                                   border:'1px solid var(--line)', borderRadius:12,
-                                  fontSize:11, cursor:'pointer'
+                                  fontSize:12, cursor:'pointer'
                                 }
-                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:10}}, fmtNum(k.r12))))
+                              }, k.kw, h('span',{style:{color:'var(--ink-3)',marginLeft:4,fontSize:11}}, fmtNum(k.r12))))
                             )
                           ))
                         )
@@ -3120,7 +3120,7 @@ window.TABS = (function(){
         ),
         totalPages > 1 && h('div',{style:{display:'flex',justifyContent:'center',gap:8,padding:14,borderTop:'1px solid var(--line)'}},
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Önceki'),
-          h('span',{style:{padding:'6px 12px',fontSize:12,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages} · ${fmtNum(filtered.length)} marka`),
+          h('span',{style:{padding:'6px 12px',fontSize:13,color:'var(--ink-2)'}}, `Sayfa ${page+1}/${totalPages} · ${fmtNum(filtered.length)} marka`),
           h('button',{className:'chip-btn', style:{padding:'6px 12px',borderRadius:999}, disabled:page>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1, p+1))}, 'Sonraki →')
         )
       )
@@ -3145,12 +3145,12 @@ window.TABS = (function(){
           h('div',null,
             h('div',{className:'lbl-cat'},'Önceki 12 Ay Ort.'),
             h('div',{className:'num', style:{fontSize:20,fontWeight:600}}, fmtFull(kw.p12)),
-            h('div',{className:'txt-3', style:{fontSize:10}}, P12_RANGE)
+            h('div',{className:'txt-3', style:{fontSize:11}}, P12_RANGE)
           ),
           h('div',null,
             h('div',{className:'lbl-cat'},'Son 12 Ay Ort.'),
             h('div',{className:'num', style:{fontSize:20,fontWeight:600}}, fmtFull(kw.r12)),
-            h('div',{className:'txt-3', style:{fontSize:10}}, R12_RANGE)
+            h('div',{className:'txt-3', style:{fontSize:11}}, R12_RANGE)
           ),
           h('div',null,
             h('div',{className:'lbl-cat'},'YoY Değişim'),
@@ -3158,7 +3158,7 @@ window.TABS = (function(){
           ),
           kw.bucket && h('div',null,
             h('div',{className:'lbl-cat'},'Hacim Kova'),
-            h('div',{style:{fontSize:14,fontWeight:500}}, kw.bucket)
+            h('div',{style:{fontSize:15,fontWeight:500}}, kw.bucket)
           ),
           cvVal != null && h('div',null,
             h('div',{className:'lbl-cat'},'CV (Mevsimsellik)'),
@@ -3191,19 +3191,19 @@ window.TABS = (function(){
         hasRoll && h('div',{className:'grid grid-2', style:{marginBottom:16}},
           h('div',null,
             h('div',{className:'lbl-cat'},'Peak ay'),
-            h('div',{style:{fontSize:15,fontWeight:600}},
+            h('div',{style:{fontSize:16,fontWeight:600}},
               rollingLongLabel(peakIdx), ' · ', h('span',{className:'num'}, fmtFull(roll[peakIdx]))
             )
           ),
           h('div',null,
             h('div',{className:'lbl-cat'},'Dip ay'),
-            h('div',{style:{fontSize:15,fontWeight:600}},
+            h('div',{style:{fontSize:16,fontWeight:600}},
               rollingLongLabel(dipIdx), ' · ', h('span',{className:'num'}, fmtFull(roll[dipIdx]))
             )
           )
         ),
 
-        hasRoll && h('div',{style:{fontSize:13,color:'var(--ink-2)',lineHeight:1.6,background:'var(--line-soft)',padding:14,borderRadius:8, display:'flex', gap:10, alignItems:'flex-start'}},
+        hasRoll && h('div',{style:{fontSize:14,color:'var(--ink-2)',lineHeight:1.6,background:'var(--line-soft)',padding:14,borderRadius:8, display:'flex', gap:10, alignItems:'flex-start'}},
           h('span',{style:{color:'var(--coral)', paddingTop:2, flexShrink:0}}, I.Bulb(16)),
           h('div',null,
             h('strong',null,'Aksiyon: '),
@@ -3423,7 +3423,7 @@ window.TABS = (function(){
       return h('th',{
         onClick:()=>setSort(s=>({k:key, d: s.k===key? -s.d : (isStr?1:-1)})),
         style:{cursor:'pointer', textAlign:align==='right'?'right':'left', whiteSpace:'nowrap', userSelect:'none'}
-      }, label, h('span',{style:{opacity: sort.k===key?1:.25, marginLeft:3, fontSize:9}}, sort.k===key ? (sort.d<0?'▼':'▲') : '↕'));
+      }, label, h('span',{style:{opacity: sort.k===key?1:.25, marginLeft:3, fontSize:10}}, sort.k===key ? (sort.d<0?'▼':'▲') : '↕'));
     };
 
     const matrixClick = (brand, col) => {
@@ -3458,7 +3458,7 @@ window.TABS = (function(){
         h(window.C.MultiSelect, {label:'Cinsiyet', options:cinsOptions, selected:fCins, onChange:setFCins, width:140}),
         h(window.C.MultiSelect, {label:'Hacim Aralığı', options:bucketLabels, selected:fBucket, onChange:setFBucket, width:160, searchable:false}),
         h('input',{type:'text', value:q, onChange:e=>setQ(e.target.value), placeholder:'Arama ifadesi ara…',
-          style:{flex:1, minWidth:150, padding:'7px 11px', fontSize:13, border:'1px solid var(--line)', borderRadius:7, background:'var(--bg)', color:'var(--ink)', outline:'none'}}),
+          style:{flex:1, minWidth:150, padding:'7px 11px', fontSize:14, border:'1px solid var(--line)', borderRadius:7, background:'var(--bg)', color:'var(--ink)', outline:'none'}}),
         hasFilter && h('button',{className:'ctrl', onClick:clearAll, style:{whiteSpace:'nowrap'}}, '✕ Temizle')
       ),
 
@@ -3504,39 +3504,39 @@ window.TABS = (function(){
         h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
           h('h3',{style:{flex:1, minWidth:200, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}},
             focus && h('button',{onClick:()=>setSeasonFocus(null), title:'Tüm kategorilere dön',
-              style:{padding:'2px 9px', fontSize:11, borderRadius:999, cursor:'pointer', border:'1px solid var(--line)', background:'var(--bg)', color:'var(--ink-2)', fontWeight:600}}, '‹ Tüm kategoriler'),
+              style:{padding:'2px 9px', fontSize:12, borderRadius:999, cursor:'pointer', border:'1px solid var(--line)', background:'var(--bg)', color:'var(--ink-2)', fontWeight:600}}, '‹ Tüm kategoriler'),
             'Sezon Takvimi · ' + (focus ? seasonFocus + ' · Alt Varyasyonlar' : 'Kategori × Ay'),
             h(InfoIcon,null, h('strong',null,'Ne gösterir? '),'Her hücrede üst: 2025 ortalama aylık arama hacmi, alt rozet: 2024 aynı aya göre YoY%. Renk satır-normalize: kırmızı (dip) → sarı (orta) → yeşil (peak). Çerçeve = yılın peak ayı.',h('br'),h('br'),h('strong',null,'Tıklama: '),'Kategoriye (satır/hücre) tıkla → o kategorinin alt filtre varyasyonları gelir. Varyasyona tıkla → keyword detayı.')),
           h('div',{style:{display:'flex', gap:4}},
             ...[['hacim','Hacim'],['yoy','YoY'],['az','A-Z']].map(([key,lbl])=>h('button',{key, onClick:()=>setSeasonSort(key),
-              style:{padding:'3px 10px', fontSize:11, borderRadius:999, cursor:'pointer', fontWeight:seasonSort===key?700:500,
+              style:{padding:'3px 10px', fontSize:12, borderRadius:999, cursor:'pointer', fontWeight:seasonSort===key?700:500,
                 border:'1px solid '+(seasonSort===key?'var(--coral)':'var(--line)'),
                 background:seasonSort===key?'color-mix(in srgb, var(--coral) 14%, var(--bg))':'var(--bg)',
                 color:seasonSort===key?'var(--coral-deep, var(--coral))':'var(--ink-2)'}}, lbl))),
-          h('span',{className:'txt-3', style:{fontSize:11}}, seasonRows.length + (focus?' varyasyon':' kategori')),
+          h('span',{className:'txt-3', style:{fontSize:12}}, seasonRows.length + (focus?' varyasyon':' kategori')),
           h(CopyButton,{getData:()=>({headers:[focus?'Varyasyon':'Kategori','Çatı', ...MONTHS.map(m=>m+' 2025'), 'YoY% (2024→2025)'], rows:seasonRows.map(r=>[r.label, r.g, ...r.v25, r.yoyTot==null?'':U.fmtPct(r.yoyTot)])})})
         ),
         seasonRows.length ? h('div',null,
           h('div',{style:{overflow:'auto', padding:'0 14px 4px', maxHeight:520}},
             h('div',{style:{display:'grid', gridTemplateColumns:`minmax(150px,200px) repeat(12, minmax(48px,1fr))`, gap:2, minWidth:'740px'}},
-              h('div',{style:{position:'sticky', top:0, left:0, zIndex:3, background:'var(--bg-card)', fontSize:9, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.06em', padding:'7px 6px'}}, focus?'Varyasyon':'Kategori'),
-              ...MONTHS.map((m,i)=>h('div',{key:'mh'+i, style:{position:'sticky', top:0, zIndex:2, background:'var(--bg-card)', fontSize:10, fontWeight:700, color:'var(--ink-3)', textAlign:'center', padding:'7px 0'}}, m)),
+              h('div',{style:{position:'sticky', top:0, left:0, zIndex:3, background:'var(--bg-card)', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.06em', padding:'7px 6px'}}, focus?'Varyasyon':'Kategori'),
+              ...MONTHS.map((m,i)=>h('div',{key:'mh'+i, style:{position:'sticky', top:0, zIndex:2, background:'var(--bg-card)', fontSize:11, fontWeight:700, color:'var(--ink-3)', textAlign:'center', padding:'7px 0'}}, m)),
               ...seasonRows.flatMap((r,ri)=>[
-                h('div',{key:'sl'+ri, className:'clickable', onClick:()=>onCellClick(r), title:(focus?r.label:r.label+' · '+r.g)+' — '+(focus?'keyword detayı':'alt varyasyonlar'), style:{position:'sticky', left:0, zIndex:1, background:'var(--bg-card)', display:'flex', alignItems:'center', gap:5, padding:'2px 6px', fontSize:11.5, fontWeight:500, cursor:'pointer', overflow:'hidden', borderTop: ri>0?'1px solid var(--line-soft)':'none'}},
+                h('div',{key:'sl'+ri, className:'clickable', onClick:()=>onCellClick(r), title:(focus?r.label:r.label+' · '+r.g)+' — '+(focus?'keyword detayı':'alt varyasyonlar'), style:{position:'sticky', left:0, zIndex:1, background:'var(--bg-card)', display:'flex', alignItems:'center', gap:5, padding:'2px 6px', fontSize:12.5, fontWeight:500, cursor:'pointer', overflow:'hidden', borderTop: ri>0?'1px solid var(--line-soft)':'none'}},
                   h('span',{style:{width:7, height:7, borderRadius:2, background:katColor1(r.g), flexShrink:0}}),
                   h('span',{style:{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, r.label),
-                  !focus && h('span',{style:{marginLeft:'auto', color:'var(--ink-3)', fontSize:11, flexShrink:0}}, '›')),
+                  !focus && h('span',{style:{marginLeft:'auto', color:'var(--ink-3)', fontSize:12, flexShrink:0}}, '›')),
                 ...r.v25.map((v,i)=>{ const t=(v-r.mn)/((r.mx-r.mn)||1); const isPeak=i===r.peakIdx;
                   const pv=r.v24[i]; const yoy = pv>0 ? (v-pv)/pv : null; const tc=U.hmText(t);
                   return h('div',{key:'sc'+ri+'_'+i, onClick:()=>onCellClick(r), title:`${r.label} · ${MONTHS[i]} 2025: ${U.fmtFull(v)}`+(yoy!=null?` · YoY ${U.fmtPct(yoy)}`:''),
                     style:{height:38, borderRadius:3, background:U.hmColor(t), color:tc, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1, cursor:'pointer', boxShadow: isPeak?'inset 0 0 0 2px var(--ink)':'none'}},
-                    h('span',{style:{fontSize:9.5, fontWeight:700, lineHeight:1}}, U.fmtNum(v)),
-                    yoy!=null && h('span',{style:{fontSize:8, fontWeight:600, lineHeight:1, opacity:.92}}, (yoy>=0?'+':'')+Math.round(yoy*100)+'%'));
+                    h('span',{style:{fontSize:10.5, fontWeight:700, lineHeight:1}}, U.fmtNum(v)),
+                    yoy!=null && h('span',{style:{fontSize:9, fontWeight:600, lineHeight:1, opacity:.92}}, (yoy>=0?'+':'')+Math.round(yoy*100)+'%'));
                 })
               ])
             )
           ),
-          h('div',{className:'txt-3', style:{fontSize:11, padding:'8px 14px 14px'}}, focus? h(React.Fragment,null,h('strong',null,seasonFocus),' kategorisinin alt filtre varyasyonları (2025 hacmi + YoY). Satıra tıkla → keyword detayı.') : h(React.Fragment,null,'Her hücrede ',h('strong',null,'üst'),': 2025 aylık hacmi, ',h('strong',null,'alt'),': YoY%. ',h('strong',null,'Bir kategoriye tıkla'),' → alt filtre varyasyonları açılır. Renk: ', h('span',{style:{color:'#e67c73', fontWeight:600}},'kırmızı (dip)'),' → ',h('span',{style:{color:'#d6a400', fontWeight:600}},'sarı'),' → ',h('span',{style:{color:'#57bb8a', fontWeight:600}},'yeşil (peak)'),'.'))
+          h('div',{className:'txt-3', style:{fontSize:12, padding:'8px 14px 14px'}}, focus? h(React.Fragment,null,h('strong',null,seasonFocus),' kategorisinin alt filtre varyasyonları (2025 hacmi + YoY). Satıra tıkla → keyword detayı.') : h(React.Fragment,null,'Her hücrede ',h('strong',null,'üst'),': 2025 aylık hacmi, ',h('strong',null,'alt'),': YoY%. ',h('strong',null,'Bir kategoriye tıkla'),' → alt filtre varyasyonları açılır. Renk: ', h('span',{style:{color:'#e67c73', fontWeight:600}},'kırmızı (dip)'),' → ',h('span',{style:{color:'#d6a400', fontWeight:600}},'sarı'),' → ',h('span',{style:{color:'#57bb8a', fontWeight:600}},'yeşil (peak)'),'.'))
         ) : h('div',{className:'txt-3', style:{padding:20, textAlign:'center'}}, 'Seçili filtrede veri yok.')
       ); })(),
 
@@ -3545,28 +3545,28 @@ window.TABS = (function(){
         h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
           h('h3',{style:{flex:1, minWidth:240}}, 'Marka × ' + levelLabel + ' Matris',
             h(InfoIcon,null, h('strong',null,'Ne gösterir? '),'En yüksek hacimli ',matrix.brands.length,' markanın ', levelLabel.toLowerCase(),' bazında aylık arama hacmi. Satır-normalize renk her markanın güçlü olduğu kolonu vurgular. Hücreye tıkla → marka + kolon filtreye girer.',h('br'),h('br'),h('strong',null,'Drill: '),'Çatı Kategori filtresi seçince kolonlar kategorilere iner.')),
-          h('span',{className:'txt-3', style:{fontSize:11}}, matrix.brands.length + ' marka × ' + matrix.cols.length + ' kolon'),
+          h('span',{className:'txt-3', style:{fontSize:12}}, matrix.brands.length + ' marka × ' + matrix.cols.length + ' kolon'),
           h(CopyButton,{getData:()=>({headers:['#','Marka', ...matrix.cols, 'Toplam'], rows:matrix.brands.map((b,i)=>[i+1, b.brand, ...matrix.cols.map(c=>b.cells[c]||0), b.total])})})
         ),
         h('div',{style:{overflow:'auto', padding:'0 14px 14px', maxHeight:520}},
           h('div',{style:{display:'grid', gridTemplateColumns:`minmax(150px,190px) repeat(${matrix.cols.length}, minmax(64px,1fr)) minmax(74px,94px)`, gap:2, minWidth:(150+matrix.cols.length*64+74)+'px'}},
-            h('div',{style:{padding:'8px 6px', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, 'Marka'),
-            ...matrix.cols.map(col => h('div',{key:'h'+col, title:col, style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'center', borderBottom:`2px solid ${katColor1(matrix.colParent[col]||col)}`, color:'var(--ink-2)', lineHeight:1.15, wordBreak:'break-word', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, col)),
-            h('div',{style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam'),
+            h('div',{style:{padding:'8px 6px', fontSize:11, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, 'Marka'),
+            ...matrix.cols.map(col => h('div',{key:'h'+col, title:col, style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'center', borderBottom:`2px solid ${katColor1(matrix.colParent[col]||col)}`, color:'var(--ink-2)', lineHeight:1.15, wordBreak:'break-word', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, col)),
+            h('div',{style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam'),
             ...matrix.brands.flatMap((r,ri)=>[
               h('div',{key:'b'+ri, className:'clickable', onClick:()=>matrixClick(r.brand,null), title:r.brand+' markasını filtrele',
-                style:{padding:'6px 8px', fontSize:12, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6, minWidth:0, borderTop: ri>0?'1px solid var(--line)':'none', position:'sticky', left:0, background:'var(--bg-card)', zIndex:1}},
-                h('span',{style:{color:'var(--ink-3)', fontSize:10, fontWeight:500, flexShrink:0, minWidth:16}}, (ri+1)+'.'),
+                style:{padding:'6px 8px', fontSize:13, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6, minWidth:0, borderTop: ri>0?'1px solid var(--line)':'none', position:'sticky', left:0, background:'var(--bg-card)', zIndex:1}},
+                h('span',{style:{color:'var(--ink-3)', fontSize:11, fontWeight:500, flexShrink:0, minWidth:16}}, (ri+1)+'.'),
                 h('span',{style:{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, minWidth:0}, title:r.brand}, r.brand)
               ),
               ...matrix.cols.map((col,ci)=>{
                 const v=r.cells[col]||0, intensity=v/matrix.rowMax[ri], parent=matrix.colParent[col]||col;
                 const bg = intensity>0 ? `color-mix(in srgb, ${katColor1(parent)} ${Math.round(intensity*82+8)}%, var(--bg-card))` : 'var(--bg-card)';
                 return h('div',{key:'c'+ri+'_'+ci, className:'clickable', onClick:()=>matrixClick(r.brand,col), title:`${r.brand} × ${col}: ${U.fmtFull(v)}`,
-                  style:{padding:'8px 4px', fontSize:10, fontWeight:600, textAlign:'center', background:bg, color:intensity>0.55?'#fff':'var(--ink-2)', borderRadius:3, borderTop:ri>0?'1px solid var(--line)':'none', minHeight:28, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}},
+                  style:{padding:'8px 4px', fontSize:11, fontWeight:600, textAlign:'center', background:bg, color:intensity>0.55?'#fff':'var(--ink-2)', borderRadius:3, borderTop:ri>0?'1px solid var(--line)':'none', minHeight:28, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}},
                   v>0?U.fmtNum(v):'·');
               }),
-              h('div',{key:'t'+ri, style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'right', color:'var(--ink-2)', borderTop:ri>0?'1px solid var(--line)':'none', display:'flex', alignItems:'center', justifyContent:'flex-end'}}, U.fmtNum(r.total))
+              h('div',{key:'t'+ri, style:{padding:'8px 4px', fontSize:12, fontWeight:700, textAlign:'right', color:'var(--ink-2)', borderTop:ri>0?'1px solid var(--line)':'none', display:'flex', alignItems:'center', justifyContent:'flex-end'}}, U.fmtNum(r.total))
             ])
           )
         )
@@ -3577,12 +3577,12 @@ window.TABS = (function(){
         h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
           h('h3',{style:{flex:1, minWidth:200}}, 'Pivot Tablo',
             h(InfoIcon,null,'Seçtiğin iki boyutu çaprazlar; hücre = toplam aylık arama hacmi. Satır-normalize renk her satırın en güçlü kolonunu vurgular.')),
-          h('div',{style:{display:'flex', alignItems:'center', gap:6, fontSize:12}},
+          h('div',{style:{display:'flex', alignItems:'center', gap:6, fontSize:13}},
             h('span',{className:'txt-3'},'Satır:'),
-            h('select',{value:pivRow, onChange:e=>setPivRow(e.target.value), className:'piv-select', style:{padding:'5px 8px', fontSize:12, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)'}},
+            h('select',{value:pivRow, onChange:e=>setPivRow(e.target.value), className:'piv-select', style:{padding:'5px 8px', fontSize:13, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)'}},
               PIV_DIMS.map(d=>h('option',{key:d.key, value:d.key}, d.label))),
             h('span',{className:'txt-3'},'Kolon:'),
-            h('select',{value:pivCol, onChange:e=>setPivCol(e.target.value), className:'piv-select', style:{padding:'5px 8px', fontSize:12, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)'}},
+            h('select',{value:pivCol, onChange:e=>setPivCol(e.target.value), className:'piv-select', style:{padding:'5px 8px', fontSize:13, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)'}},
               PIV_DIMS.map(d=>h('option',{key:d.key, value:d.key}, d.label)))
           ),
           h(CopyButton,{getData:()=>({headers:[dimLabel(pivRow), ...pivot.cols, 'Toplam'], rows:pivot.rows.map(r=>[r.key, ...pivot.cols.map(c=>r.cells[c]||0), r.tot])})})
@@ -3590,20 +3590,20 @@ window.TABS = (function(){
         pivRow===pivCol ? h('div',{className:'txt-3', style:{padding:'14px'}}, 'Satır ve kolon farklı boyut olmalı.')
         : h('div',{style:{overflow:'auto', padding:'0 14px 14px', maxHeight:520}},
           h('div',{style:{display:'grid', gridTemplateColumns:`minmax(150px,200px) repeat(${pivot.cols.length}, minmax(70px,1fr)) minmax(78px,98px)`, gap:2, minWidth:(150+pivot.cols.length*70+78)+'px'}},
-            h('div',{style:{padding:'8px 6px', fontSize:10, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, dimLabel(pivRow)+' \\ '+dimLabel(pivCol)),
-            ...pivot.cols.map(col=>h('div',{key:'ph'+col, title:col, style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'center', color:'var(--ink-2)', lineHeight:1.15, wordBreak:'break-word', borderBottom:'2px solid var(--coral)', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, col)),
-            h('div',{style:{padding:'8px 4px', fontSize:10, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam'),
+            h('div',{style:{padding:'8px 6px', fontSize:11, fontWeight:700, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.08em', position:'sticky', top:0, left:0, background:'var(--bg-card)', zIndex:3}}, dimLabel(pivRow)+' \\ '+dimLabel(pivCol)),
+            ...pivot.cols.map(col=>h('div',{key:'ph'+col, title:col, style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'center', color:'var(--ink-2)', lineHeight:1.15, wordBreak:'break-word', borderBottom:'2px solid var(--coral)', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, col)),
+            h('div',{style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'right', color:'var(--ink-3)', textTransform:'uppercase', position:'sticky', top:0, background:'var(--bg-card)', zIndex:2}}, 'Toplam'),
             ...pivot.rows.flatMap((r,ri)=>[
-              h('div',{key:'pr'+ri, title:r.key, style:{padding:'6px 8px', fontSize:11.5, fontWeight:600, display:'flex', alignItems:'center', gap:5, minWidth:0, borderTop: ri>0?'1px solid var(--line)':'none', position:'sticky', left:0, background:'var(--bg-card)', zIndex:1}},
+              h('div',{key:'pr'+ri, title:r.key, style:{padding:'6px 8px', fontSize:12.5, fontWeight:600, display:'flex', alignItems:'center', gap:5, minWidth:0, borderTop: ri>0?'1px solid var(--line)':'none', position:'sticky', left:0, background:'var(--bg-card)', zIndex:1}},
                 h('span',{style:{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, r.key)),
               ...pivot.cols.map((col,ci)=>{ const v=r.cells[col]||0, intensity=v/pivot.rowMax[ri];
                 const bg = intensity>0 ? `color-mix(in srgb, var(--coral) ${Math.round(intensity*80+6)}%, var(--bg-card))` : 'var(--bg-card)';
-                return h('div',{key:'pc'+ri+'_'+ci, title:`${r.key} × ${col}: ${U.fmtFull(v)}`, style:{padding:'8px 4px', fontSize:10, fontWeight:600, textAlign:'center', background:bg, color:intensity>0.55?'#fff':'var(--ink-2)', borderRadius:3, borderTop:ri>0?'1px solid var(--line)':'none', minHeight:28, display:'flex', alignItems:'center', justifyContent:'center'}}, v>0?U.fmtNum(v):'·');
+                return h('div',{key:'pc'+ri+'_'+ci, title:`${r.key} × ${col}: ${U.fmtFull(v)}`, style:{padding:'8px 4px', fontSize:11, fontWeight:600, textAlign:'center', background:bg, color:intensity>0.55?'#fff':'var(--ink-2)', borderRadius:3, borderTop:ri>0?'1px solid var(--line)':'none', minHeight:28, display:'flex', alignItems:'center', justifyContent:'center'}}, v>0?U.fmtNum(v):'·');
               }),
-              h('div',{key:'pt'+ri, style:{padding:'8px 4px', fontSize:11, fontWeight:700, textAlign:'right', color:'var(--ink-2)', borderTop:ri>0?'1px solid var(--line)':'none', display:'flex', alignItems:'center', justifyContent:'flex-end'}}, U.fmtNum(r.tot))
+              h('div',{key:'pt'+ri, style:{padding:'8px 4px', fontSize:12, fontWeight:700, textAlign:'right', color:'var(--ink-2)', borderTop:ri>0?'1px solid var(--line)':'none', display:'flex', alignItems:'center', justifyContent:'flex-end'}}, U.fmtNum(r.tot))
             ])
           ),
-          (pivot.moreRows>0 || pivot.moreCols>0) && h('div',{className:'txt-3', style:{fontSize:11, paddingTop:8}}, '+ '+(pivot.moreRows>0?pivot.moreRows+' satır':'')+(pivot.moreRows>0&&pivot.moreCols>0?', ':'')+(pivot.moreCols>0?pivot.moreCols+' kolon':'')+' gizli (top liste gösteriliyor)')
+          (pivot.moreRows>0 || pivot.moreCols>0) && h('div',{className:'txt-3', style:{fontSize:12, paddingTop:8}}, '+ '+(pivot.moreRows>0?pivot.moreRows+' satır':'')+(pivot.moreRows>0&&pivot.moreCols>0?', ':'')+(pivot.moreCols>0?pivot.moreCols+' kolon':'')+' gizli (top liste gösteriliyor)')
         )
       ),
 
@@ -3611,20 +3611,20 @@ window.TABS = (function(){
       h('div',{className:'card', ref:tableRef},
         h('div',{className:'card-header', style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
           h('h3',{style:{flex:1, minWidth:200}}, 'Keyword Listesi'),
-          h('span',{className:'txt-3', style:{fontSize:11}}, U.fmtFull(sorted.length)+' satır'),
+          h('span',{className:'txt-3', style:{fontSize:12}}, U.fmtFull(sorted.length)+' satır'),
           h(CopyButton,{getData:()=>({headers:['Arama İfadesi','Çatı Kategori','Kategori','Cinsiyet','Marka','Filtre Tipi','Filtre Adı','Aylık Hacim','YoY'], rows:sorted.slice(0,5000).map(k=>[k.kw,k.g,k.c,k.x,k.b,k.ft,k.fa,k.v, k.y==null?'':U.fmtPct(k.y)])})})
         ),
         // tablo-içi ikinci filtre alanı
         h('div',{style:{display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', padding:'0 14px 12px'}},
           h('input',{type:'text', value:tq, onChange:e=>setTq(e.target.value), placeholder:'Bu listede ara (kelime / marka)…',
-            style:{flex:1, minWidth:180, padding:'6px 10px', fontSize:12.5, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)', outline:'none'}}),
+            style:{flex:1, minWidth:180, padding:'6px 10px', fontSize:13.5, border:'1px solid var(--line)', borderRadius:6, background:'var(--bg)', color:'var(--ink)', outline:'none'}}),
           h(window.C.MultiSelect, {label:'Kategori', options:tCatOpts, selected:tCat, onChange:setTCat, width:150}),
           h(window.C.MultiSelect, {label:'Filtre Tipi', options:tFtOpts, selected:tFt, onChange:setTFt, width:150}),
           h(window.C.MultiSelect, {label:'Hacim', options:bucketLabels, selected:tBucket, onChange:setTBucket, width:140, searchable:false}),
           (tq||tCat.length||tFt.length||tBucket.length) && h('button',{className:'ctrl', onClick:()=>{ setTq(''); setTCat([]); setTFt([]); setTBucket([]); }}, '✕')
         ),
         h('div',{style:{overflow:'auto', padding:'0 6px'}},
-          h('table',{className:'tbl', style:{width:'100%', minWidth:'980px', fontSize:12.5, tableLayout:'fixed'}},
+          h('table',{className:'tbl', style:{width:'100%', minWidth:'980px', fontSize:13.5, tableLayout:'fixed'}},
             h('colgroup',null,
               h('col',{style:{width:'20%'}}), h('col',{style:{width:'12%'}}), h('col',{style:{width:'9%'}}),
               h('col',{style:{width:'11%'}}), h('col',{style:{width:'11%'}}), h('col',{style:{width:'12%'}}),
@@ -3646,14 +3646,14 @@ window.TABS = (function(){
                 h('td',{className:'num', style:{fontWeight:700}, title:U.fmtFull(k.v)}, U.fmtNum(k.v)),
                 h('td',{className:'num'}, k.y==null? h('span',{className:'txt-3'},'–') : h('span',{style:{color:k.y>0?'var(--green)':k.y<0?'var(--red)':'var(--ink-2)', fontWeight:600}}, U.fmtPct(k.y))),
                 h('td',{style:{textAlign:'center'}}, h(Sparkline,{values:k.m, w:66, h:20, color:katColor1(k.g)})),
-                h('td',{style:{textAlign:'center'}}, h('span',{className:'pill neu', style:{fontSize:10}}, U.TR_MONTHS[pk]))
+                h('td',{style:{textAlign:'center'}}, h('span',{className:'pill neu', style:{fontSize:11}}, U.TR_MONTHS[pk]))
               );
             }))
           )
         ),
         pageCount>1 && h('div',{style:{display:'flex', alignItems:'center', justifyContent:'center', gap:12, padding:'12px 0'}},
           h('button',{className:'ctrl', disabled:page===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '‹ Önceki'),
-          h('span',{className:'txt-3', style:{fontSize:12}}, (page+1)+' / '+pageCount),
+          h('span',{className:'txt-3', style:{fontSize:13}}, (page+1)+' / '+pageCount),
           h('button',{className:'ctrl', disabled:page>=pageCount-1, onClick:()=>setPage(p=>Math.min(pageCount-1,p+1))}, 'Sonraki ›')
         )
       ),
@@ -3664,8 +3664,8 @@ window.TABS = (function(){
         const pk=seas.indexOf(Math.max(...seas)), dp=seas.indexOf(Math.min(...seas)); const cvv=cv(seas);
         const m26pad = new Array(12).fill(null); if(k.m26) for(let i=0;i<k.m26.length;i++) m26pad[i]=k.m26[i];
         const chip=(lbl,val,strong)=>h('div',{style:{display:'flex', flexDirection:'column', gap:2, padding:'8px 12px', background:'var(--line-soft)', borderRadius:8, minWidth:120}},
-          h('span',{style:{fontSize:9, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--ink-3)', fontWeight:700}}, lbl),
-          h('span',{style:{fontSize:13, fontWeight: strong?700:500, color: strong?'var(--coral)':'var(--ink)'}}, val));
+          h('span',{style:{fontSize:10, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--ink-3)', fontWeight:700}}, lbl),
+          h('span',{style:{fontSize:14, fontWeight: strong?700:500, color: strong?'var(--coral)':'var(--ink)'}}, val));
         return h(Modal,{onClose:()=>setModalKw(null)},
           h('div',null,
             h('div',{className:'lbl-cat'}, k.g + ' › ' + k.c),
@@ -3673,7 +3673,7 @@ window.TABS = (function(){
             h('div',{style:{display:'flex', gap:20, marginBottom:18, flexWrap:'wrap'}},
               h('div',null, h('div',{className:'lbl-cat'},'2026 Ort. (aylık)'), h('div',{className:'num', style:{fontSize:20, fontWeight:600}}, U.fmtFull(k.v))),
               h('div',null, h('div',{className:'lbl-cat'},'YoY (2024→2025)'), h('div',{style:{fontSize:20}}, k.y==null?'–':h(YoYPill,{yoy:k.y}))),
-              h('div',null, h('div',{className:'lbl-cat'},'Hacim Bandı'), h('div',{style:{fontSize:15, fontWeight:600}}, bucketOf(k.v))),
+              h('div',null, h('div',{className:'lbl-cat'},'Hacim Bandı'), h('div',{style:{fontSize:16, fontWeight:600}}, bucketOf(k.v))),
               h('div',null, h('div',{className:'lbl-cat'},'CV (Mevsimsellik)'), h('div',{className:'num', style:{fontSize:20, fontWeight:600}}, cvv.toFixed(2).replace('.',',')))
             ),
             h('div',{style:{display:'flex', flexWrap:'wrap', gap:8, marginBottom:18}},
@@ -3693,10 +3693,10 @@ window.TABS = (function(){
               ], legend:true, height:230})
             ),
             h('div',{className:'grid grid-2', style:{marginBottom:16}},
-              h('div',null, h('div',{className:'lbl-cat'},'Peak ay (2025)'), h('div',{style:{fontSize:15, fontWeight:600}}, TR_MONTHS_LONG[pk], ' · ', h('span',{className:'num'}, U.fmtFull(seas[pk])))),
-              h('div',null, h('div',{className:'lbl-cat'},'Dip ay (2025)'), h('div',{style:{fontSize:15, fontWeight:600}}, TR_MONTHS_LONG[dp], ' · ', h('span',{className:'num'}, U.fmtFull(seas[dp]))))
+              h('div',null, h('div',{className:'lbl-cat'},'Peak ay (2025)'), h('div',{style:{fontSize:16, fontWeight:600}}, TR_MONTHS_LONG[pk], ' · ', h('span',{className:'num'}, U.fmtFull(seas[pk])))),
+              h('div',null, h('div',{className:'lbl-cat'},'Dip ay (2025)'), h('div',{style:{fontSize:16, fontWeight:600}}, TR_MONTHS_LONG[dp], ' · ', h('span',{className:'num'}, U.fmtFull(seas[dp]))))
             ),
-            h('div',{style:{fontSize:13, color:'var(--ink-2)', lineHeight:1.6, background:'var(--line-soft)', padding:14, borderRadius:8, display:'flex', gap:10, alignItems:'flex-start'}},
+            h('div',{style:{fontSize:14, color:'var(--ink-2)', lineHeight:1.6, background:'var(--line-soft)', padding:14, borderRadius:8, display:'flex', gap:10, alignItems:'flex-start'}},
               h('span',{style:{color:'var(--coral)', paddingTop:2, flexShrink:0}}, I.Bulb(16)),
               h('div',null, h('strong',null,'Aksiyon: '),
                 cvv>0.3 ? `Yüksek mevsimsel kırılım. Bu facet sayfası ${TR_MONTHS_LONG[pk]} zirvesinden 4-6 hafta önce hazır olmalı.`

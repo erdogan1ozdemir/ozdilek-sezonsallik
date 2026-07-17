@@ -135,7 +135,7 @@ window.C = (function(){
       const range = max - min || 1;
       grid.push(h('div',{key:'l'+ri, className:'hm-row-label', title:row.label},
         h('span',{style:{fontWeight:500, lineHeight:1.2}}, row.label),
-        row.sub && h('span',{className:'txt-3', style:{fontSize:9, lineHeight:1.2, marginTop:2}}, row.sub)
+        row.sub && h('span',{className:'txt-3', style:{fontSize:10, lineHeight:1.2, marginTop:2}}, row.sub)
       ));
       row.values.forEach((v,i) => {
         const t = (v - min) / range;
@@ -222,9 +222,9 @@ window.C = (function(){
             transition: 'background .15s'
           }
         },
-          h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:13}},
             h('div',null,
-              isActive && h('span',{style:{marginRight:4,color:'var(--coral-deep)',fontSize:10}}, '●'),
+              isActive && h('span',{style:{marginRight:4,color:'var(--coral-deep)',fontSize:11}}, '●'),
               h('span',{style:{fontWeight:600}}, r.label),
               r.share != null && h('span',{className:'txt-3', style:{marginLeft:6}}, ' ' + (r.share*100).toFixed(1).replace('.',',')+'%')
             ),
@@ -330,7 +330,8 @@ window.C = (function(){
       [series]
     );
 
-    const w = Math.max(320, containerW), pad = {t:16, r:16, b:28, l:48};
+    // r: son ay etiketi (ör. "Haz 26") eksenin sağ ucunda ortalandığı için taşmasın diye pay bırakılır
+    const w = Math.max(320, containerW), pad = {t:16, r:28, b:30, l:52};
     const cw = w - pad.l - pad.r;
     const ch = height - pad.t - pad.b;
     const all = series.flatMap(s => s.values || []).filter(v => v != null);
@@ -373,9 +374,9 @@ window.C = (function(){
       },
         tickVals.map((t,i) => h('g',{key:'t'+i},
           h('line',{x1:pad.l, x2:pad.l+cw, y1:yAt(t), y2:yAt(t), stroke:'var(--line)', strokeDasharray:i===0?'':'2 3'}),
-          h('text',{x:pad.l-6, y:yAt(t)+3, fontSize:10, fill:'var(--ink-3)', textAnchor:'end'}, yFormat(t))
+          h('text',{x:pad.l-6, y:yAt(t)+3, fontSize:11, fill:'var(--ink-3)', textAnchor:'end'}, yFormat(t))
         )),
-        labels.map((l,i) => h('text',{key:'x'+i, x:xs[i], y:height-8, fontSize:10, fill:'var(--ink-3)', textAnchor:'middle'}, l)),
+        labels.map((l,i) => h('text',{key:'x'+i, x:xs[i], y:height-8, fontSize:11, fill:'var(--ink-3)', textAnchor:'middle'}, l)),
         // Karşılaştırma serileri (s.overlay) en son çizilir ve kesikli olur: GKP hacimleri
         // bucketlandığı için iki dönem birebir çakışabiliyor; kesikli üst çizgi olmadan
         // alttaki seri tamamen gizlenir ve grafik erken bitiyormuş gibi görünür.
@@ -410,13 +411,13 @@ window.C = (function(){
         const ordered = [...series].reverse();
         return h(FloatingTooltip, { x: anchorX, y: anchorY, placement: 'top' },
           !hasPointLabels && h('div',{style:{fontWeight:600, marginBottom:2}}, labels[hoverI]),
-          ordered.map((s,i) => h('div',{key:i, style:{display:'flex',alignItems:'center',gap:6,fontSize:11}},
+          ordered.map((s,i) => h('div',{key:i, style:{display:'flex',alignItems:'center',gap:6,fontSize:12}},
             h('div',{style:{width:8,height:8,borderRadius:2,background:s.color||'var(--accent)', flexShrink:0}}),
             hasPointLabels
               ? h('span',{style:{fontWeight:600}}, (s.pointLabels?.[hoverI] || labels[hoverI]) + ': ')
               : h('span',{style:{color:'var(--ink-2)'}}, s.name+': '),
             h('span',{className:'num',style:{fontWeight:600}}, yFormat(s.values?.[hoverI])),
-            hasPointLabels && s.name && h('span',{style:{color:'var(--ink-3)', fontSize:10, marginLeft:2}}, s.shortName || s.name)
+            hasPointLabels && s.name && h('span',{style:{color:'var(--ink-3)', fontSize:11, marginLeft:2}}, s.shortName || s.name)
           ))
         );
       })()
@@ -468,8 +469,8 @@ window.C = (function(){
           const color = d.color || (colorBy==='yoy' ? (d.value > 0 ? '#2E7D32' : '#D32F2F') : 'var(--accent)');
           return h('g',{key:i, onMouseEnter:()=>setHoverI(i), onMouseLeave:()=>setHoverI(null), onClick:()=>onBarClick && onBarClick(d), style:{cursor:onBarClick?'pointer':'default'}},
             h('rect',{x, y, width:bw, height:hh, fill:color, opacity: hoverI===i ? 1 : .85, rx:3}),
-            h('text',{x:x+bw/2, y:d.value>=0 ? y-6 : y+hh+14, fontSize:10, fill:'var(--ink-2)', textAnchor:'middle', fontFamily:'Bricolage Grotesque', fontWeight:600}, yFormat(d.value)),
-            h('text',{x:x+bw/2, y:height-32, fontSize:9, fill:'var(--ink-3)', textAnchor:'middle', transform:`rotate(-28 ${x+bw/2} ${height-32})`}, d.label.length>22?d.label.slice(0,22)+'…':d.label)
+            h('text',{x:x+bw/2, y:d.value>=0 ? y-6 : y+hh+14, fontSize:11, fill:'var(--ink-2)', textAnchor:'middle', fontFamily:'Bricolage Grotesque', fontWeight:600}, yFormat(d.value)),
+            h('text',{x:x+bw/2, y:height-32, fontSize:10, fill:'var(--ink-3)', textAnchor:'middle', transform:`rotate(-28 ${x+bw/2} ${height-32})`}, d.label.length>22?d.label.slice(0,22)+'…':d.label)
           );
         })
       ),
@@ -525,11 +526,11 @@ window.C = (function(){
         })),
         // center label
         hovered ? h('g',null,
-          h('text',{x:cx, y:cy-6, fontSize:14, fontFamily:'Bricolage Grotesque', fontWeight:600, fill:'var(--ink)', textAnchor:'middle'}, (hovered.pct*100).toFixed(1).replace('.',',')+'%'),
-          h('text',{x:cx, y:cy+10, fontSize:10, fill:'var(--ink-3)', textAnchor:'middle'}, fmtNum(hovered.value))
+          h('text',{x:cx, y:cy-6, fontSize:15, fontFamily:'Bricolage Grotesque', fontWeight:600, fill:'var(--ink)', textAnchor:'middle'}, (hovered.pct*100).toFixed(1).replace('.',',')+'%'),
+          h('text',{x:cx, y:cy+10, fontSize:11, fill:'var(--ink-3)', textAnchor:'middle'}, fmtNum(hovered.value))
         ) : h('g',null,
-          h('text',{x:cx, y:cy-2, fontSize:11, fill:'var(--ink-3)', textAnchor:'middle'}, 'Toplam'),
-          h('text',{x:cx, y:cy+13, fontSize:14, fontFamily:'Bricolage Grotesque', fontWeight:600, fill:'var(--ink)', textAnchor:'middle'}, fmtNum(total))
+          h('text',{x:cx, y:cy-2, fontSize:12, fill:'var(--ink-3)', textAnchor:'middle'}, 'Toplam'),
+          h('text',{x:cx, y:cy+13, fontSize:15, fontFamily:'Bricolage Grotesque', fontWeight:600, fill:'var(--ink)', textAnchor:'middle'}, fmtNum(total))
         )
       ),
       hovered && (() => {
@@ -542,7 +543,7 @@ window.C = (function(){
             h('div',{style:{width:8,height:8,borderRadius:2,background:hovered.color}}),
             h('span',{style:{fontWeight:600}}, hovered.label)
           ),
-          h('div',{className:'num',style:{fontSize:11,color:'var(--ink-2)'}},
+          h('div',{className:'num',style:{fontSize:12,color:'var(--ink-2)'}},
             fmtFull(hovered.value) + ' · ' + (hovered.pct*100).toFixed(1).replace('.',',') + '%'
           )
         );
@@ -656,7 +657,7 @@ window.C = (function(){
         h('span',{className:'ms-text'}, displayText),
         selected.length > 0 && h('span',{
           className:'ms-count',
-          style:{marginLeft:'auto',marginRight:6,fontSize:10,padding:'1px 6px',borderRadius:8,background:'var(--coral-soft,rgba(255,123,83,.15))',color:'var(--coral-deep)',fontWeight:700}
+          style:{marginLeft:'auto',marginRight:6,fontSize:11,padding:'1px 6px',borderRadius:8,background:'var(--coral-soft,rgba(255,123,83,.15))',color:'var(--coral-deep)',fontWeight:700}
         }, selected.length),
         h('span',{className:'ms-caret'}, '▾')
       ),
@@ -670,7 +671,7 @@ window.C = (function(){
             value: query,
             onChange: e => setQuery(e.target.value),
             style:{
-              width:'100%', padding:'6px 10px', fontSize:12,
+              width:'100%', padding:'6px 10px', fontSize:13,
               border:'1px solid var(--line)', borderRadius:6,
               background:'var(--bg)', color:'var(--ink)', outline:'none'
             }
@@ -684,7 +685,7 @@ window.C = (function(){
             padding:'6px 10px 4px', borderBottom:'1px solid var(--line)'
           }
         },
-          h('span',{style:{fontSize:10, color:'var(--ink-3)', fontWeight:600, textTransform:'uppercase', letterSpacing:'.08em', marginRight:4}}, (catalogFilter.label || 'Katalog') + ':'),
+          h('span',{style:{fontSize:11, color:'var(--ink-3)', fontWeight:600, textTransform:'uppercase', letterSpacing:'.08em', marginRight:4}}, (catalogFilter.label || 'Katalog') + ':'),
           (catalogFilter.options || [
             {value:'', label:'Tümü'},
             {value:'Var', label:'Özdilekte Var'},
@@ -696,7 +697,7 @@ window.C = (function(){
               className: 'ms-catalog-chip' + (active ? ' active' : ''),
               onClick: (e) => { e.stopPropagation(); catalogFilter.onChange(opt.value); },
               style:{
-                padding:'3px 9px', fontSize:11, borderRadius:999, cursor:'pointer',
+                padding:'3px 9px', fontSize:12, borderRadius:999, cursor:'pointer',
                 border:'1px solid ' + (active ? 'var(--coral)' : 'var(--line)'),
                 background: active ? 'color-mix(in srgb, var(--coral) 14%, var(--bg))' : 'var(--bg)',
                 color: active ? 'var(--coral-deep, var(--coral))' : 'var(--ink-2)',
@@ -709,11 +710,11 @@ window.C = (function(){
         h('div',{className:'ms-actions'},
           h('button',{className:'ms-action', onClick:()=>onChange([])}, 'Hiçbiri'),
           h('button',{className:'ms-action', onClick:()=>onChange([...filteredOptions])}, 'Hepsi'),
-          query && h('span',{style:{fontSize:10,color:'var(--ink-3)',marginLeft:'auto',paddingRight:4}}, filteredOptions.length + '/' + options.length)
+          query && h('span',{style:{fontSize:11,color:'var(--ink-3)',marginLeft:'auto',paddingRight:4}}, filteredOptions.length + '/' + options.length)
         ),
         h('div',{className:'ms-options'},
           filteredOptions.length === 0
-            ? h('div',{className:'ms-empty', style:{padding:'14px 10px', fontSize:12, color:'var(--ink-3)', textAlign:'center'}}, 'Sonuç yok')
+            ? h('div',{className:'ms-empty', style:{padding:'14px 10px', fontSize:13, color:'var(--ink-3)', textAlign:'center'}}, 'Sonuç yok')
             : filteredOptions.map(opt => {
                 const isChecked = selected.length === 0 ? false : selected.includes(opt);
                 return h('label',{key:opt, className:'ms-option'},
@@ -775,7 +776,7 @@ window.C = (function(){
       h('div',{className:'sm-header'},
         h('div',{className:'sm-dot', style:{background: color}}),
         h('div',{className:'sm-label'}, it.label),
-        it.yoy != null && h('span',{className:'pill '+(it.yoy>0.02?'pos':it.yoy<-0.02?'neg':'neu'),style:{marginLeft:'auto',fontSize:10,padding:'1px 6px'}}, fmtPct(it.yoy,0))
+        it.yoy != null && h('span',{className:'pill '+(it.yoy>0.02?'pos':it.yoy<-0.02?'neg':'neu'),style:{marginLeft:'auto',fontSize:11,padding:'1px 6px'}}, fmtPct(it.yoy,0))
       ),
       h('div',{className:'sm-body', style:{position:'relative'}},
         h('svg',{
@@ -873,7 +874,7 @@ window.C = (function(){
         key:i, x, y,
         textAnchor:'middle', dominantBaseline:'middle',
         style:{
-          fontSize: 10,
+          fontSize:11,
           fontFamily:'Bricolage Grotesque',
           fontWeight: isPeak ? 700 : 500,
           fill: isPeak ? color : 'var(--ink-2)'
@@ -896,9 +897,9 @@ window.C = (function(){
         wedges,
         labels,
         // Center label
-        h('text',{x:cx, y:cy-8, textAnchor:'middle', style:{fontSize:10,fontFamily:'Outfit',fill:'var(--ink-3)',textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}, monthsLabels[activeI]),
+        h('text',{x:cx, y:cy-8, textAnchor:'middle', style:{fontSize:11,fontFamily:'Outfit',fill:'var(--ink-3)',textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600}}, monthsLabels[activeI]),
         h('text',{x:cx, y:cy+12, textAnchor:'middle', style:{fontSize:18,fontFamily:'Bricolage Grotesque',fontWeight:700,fill:'var(--ink)'}}, fmtNum(activeV)),
-        h('text',{x:cx, y:cy+28, textAnchor:'middle', style:{fontSize:9,fontFamily:'Outfit',fill:'var(--ink-3)'}}, activeI === peakIdx ? '★ Peak ayı' : `${((activeV/total)*100).toFixed(1).replace('.',',')}%`)
+        h('text',{x:cx, y:cy+28, textAnchor:'middle', style:{fontSize:10,fontFamily:'Outfit',fill:'var(--ink-3)'}}, activeI === peakIdx ? '★ Peak ayı' : `${((activeV/total)*100).toFixed(1).replace('.',',')}%`)
       )
     );
   }
@@ -1016,8 +1017,8 @@ window.C = (function(){
 
     return h('svg',{viewBox:`0 0 ${width} ${height}`, style:{width:'100%',height:'auto',fontFamily:'Outfit',overflow:'visible'}},
       // Column headers
-      h('text',{x:x0, y:10, style:{fontSize:11,fontWeight:700,fill:'var(--ink-3)',letterSpacing:'.06em'}}, '2024'),
-      h('text',{x:x1, y:10, textAnchor:'end', style:{fontSize:11,fontWeight:700,fill:'var(--ink-3)',letterSpacing:'.06em'}}, '2025'),
+      h('text',{x:x0, y:10, style:{fontSize:12,fontWeight:700,fill:'var(--ink-3)',letterSpacing:'.06em'}}, '2024'),
+      h('text',{x:x1, y:10, textAnchor:'end', style:{fontSize:12,fontWeight:700,fill:'var(--ink-3)',letterSpacing:'.06em'}}, '2025'),
       // Lines
       sorted.map((it, i) => {
         const y24 = pad.t + (it.rank24 - 0.5) * rowH;
@@ -1040,14 +1041,14 @@ window.C = (function(){
           h('circle',{cx:x0, cy:y24, r:isHover?7:5, fill:it.color, stroke:'var(--bg-card)', strokeWidth:2}),
           h('circle',{cx:x1, cy:y25, r:isHover?7:5, fill:it.color, stroke:'var(--bg-card)', strokeWidth:2}),
           // Left label (rank #)
-          h('text',{x:x0-10, y:y24+4, textAnchor:'end', style:{fontSize:11,fontWeight:600,fill:'var(--ink-3)'}}, '#' + it.rank24),
+          h('text',{x:x0-10, y:y24+4, textAnchor:'end', style:{fontSize:12,fontWeight:600,fill:'var(--ink-3)'}}, '#' + it.rank24),
           // Right label (category name)
-          h('text',{x:x1+12, y:y25+4, style:{fontSize:12,fontWeight: isHover ? 700 : 600, fill: isHover ? it.color : 'var(--ink)'}}, it.label),
+          h('text',{x:x1+12, y:y25+4, style:{fontSize:13,fontWeight: isHover ? 700 : 600, fill: isHover ? it.color : 'var(--ink)'}}, it.label),
           // Rank change badge
           diff !== 0 && h('text',{
             x: x1 + 12, y: y25 + 18,
             style:{
-              fontSize:10, fontWeight:700,
+              fontSize:11, fontWeight:700,
               fill: isUp ? '#10B981' : '#EF4444'
             }
           }, isUp ? `↑ ${diff}` : `↓ ${Math.abs(diff)}`)
@@ -1119,7 +1120,7 @@ window.C = (function(){
         monthsLabels.map((m,i) => h('text',{
           key:m, x:xFor(i), y:height-6,
           textAnchor:'middle',
-          style:{fontSize:10, fontFamily:'Outfit', fill: i === hoverI ? 'var(--ink)' : 'var(--ink-3)', fontWeight: i === hoverI ? 700 : 500}
+          style:{fontSize:11, fontFamily:'Outfit', fill: i === hoverI ? 'var(--ink)' : 'var(--ink-3)', fontWeight: i === hoverI ? 700 : 500}
         }, m)),
         // Hover vertical line
         hoverI != null && h('line',{
@@ -1128,7 +1129,7 @@ window.C = (function(){
         })
       ),
       // Legend
-      h('div',{style:{display:'flex',flexWrap:'wrap',gap:'4px 12px',marginTop:8,fontSize:11}},
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:'4px 12px',marginTop:8,fontSize:12}},
         series.map(ser => h('div',{key:ser.label, style:{display:'flex',alignItems:'center',gap:4}},
           h('div',{style:{width:10,height:10,borderRadius:2,background:ser.color}}),
           h('span',null, ser.label),
@@ -1204,7 +1205,7 @@ window.C = (function(){
       }
       return String(v).replace(/\t/g,' ').replace(/\n/g,' ');
     };
-    const btnSize = size === 'md' ? {padding:'6px 12px', fontSize:12} : {padding:'4px 9px', fontSize:11};
+    const btnSize = size === 'md' ? {padding:'6px 12px', fontSize:13} : {padding:'4px 9px', fontSize:12};
     return h('button', {
       className: 'copy-btn chip-btn' + (copied ? ' copied' : ''),
       onClick: handle,
