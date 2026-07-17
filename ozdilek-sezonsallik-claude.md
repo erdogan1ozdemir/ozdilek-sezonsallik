@@ -35,3 +35,7 @@
   - **Çözüm:** `LineChart`e `series[].dashed` + `series[].overlay` eklendi. Karşılaştırma serileri (rolling'de Önceki 12 Ay; takvimde 2024 & 2025) kesikli çizilir ve `drawSeries` sıralamasıyla en üstte kalır → çakışmada alttaki solid çizgi kesik aralarından görünür. Legend swatch'ları da kesikli. Overlay serilerin noktaları küçültüldü (r=2) ki primary seri gizlenmesin.
 - **Sezon takvimi tooltip'i:** "SON 12 AY / ÖNCEKİ 12 AY" yerine artık hücrenin kendi ayı yılıyla: **TEM 25 / TEM 24** (yanında soluk dönem ipucu). `Heatmap`e `tipLabels` + `prevTipLabels` prop'ları eklendi; `heatmapLabelProps(viewMode)` helper'ı rolling'de ROLLING_LABELS/P12_LABELS, takvimde "Oca 25"/"Oca 24" geçirir. Ay bilgisi metriklerde olduğu için tooltip başlığından kaldırıldı. Line chart tooltip'iyle aynı okuma.
 - **Doğrulama:** stanley termos modalinde gri kesikli çizgi Haz 26'ya kadar net; Özet + Kategoriler heatmap tooltip'leri her iki görünümde doğru; `npm test` 20/20; console hatasız.
+
+### Üçüncü tur (aynı gün)
+
+- **Tweaks butonu topbar'dan kaldırıldı** (app.jsx): ön yüzde görünmesine gerek yok. Panel kodu (`.tweaks-panel`, tema/palet seçicileri) duruyor ve edit mode entegrasyonu (`__activate_edit_mode` postMessage) üzerinden hâlâ açılabiliyor. Topbar'da Paylaş + tema (Dark/Light) düğmeleri kaldı; tema toggle'ı doğrulandı.

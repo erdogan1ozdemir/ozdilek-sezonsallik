@@ -306,10 +306,9 @@
             ),
             h('button',{className:'ctrl inbound-ctrl', onClick:()=>applyTweak({theme: tweaks.theme==='dark'?'light':'dark'})},
               tweaks.theme==='dark' ? '☀ Light' : '☾ Dark'
-            ),
-            h('button',{className:'ctrl inbound-ctrl'+(tweaksOpen?' active':''), onClick:()=>setTweaksOpen(o=>!o)},
-              '⚙ Tweaks'
             )
+            // Tweaks butonu topbar'dan kaldırıldı — panel yalnızca edit mode
+            // (__activate_edit_mode) üzerinden açılır, ön yüzde görünmez.
           ),
           AGENCY.show && h('div',{className:'inbound-logo-wrap'},
             h('img',{src:'assets/agency-logo.png', alt:AGENCY.label || '', style:{height:20, display:'block'}}),
